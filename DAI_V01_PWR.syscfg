@@ -1,0 +1,79 @@
+/**
+ * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
+ * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * @cliArgs --device "F2803x" --package "F2803x_80PN" --part "F2803x_80PN"
+ * @versions {"data":"2020090214","timestamp":"2020090214","tool":"1.6.0+1543","templates":"2020090214"}
+ */
+
+/**
+ * These are the peripherals and settings in this configuration
+ */
+const iEPWM1              = scripting.addPeripheral("EPWM");
+iEPWM1.$name              = "U1";
+iEPWM1.$assign            = "EPWM1";
+iEPWM1["EPWM#A"].$assign  = "GPIO0";
+iEPWM1["EPWM#B"].$assign  = "GPIO1";
+const iEPWM2              = scripting.addPeripheral("EPWM");
+iEPWM2.$name              = "V1";
+iEPWM2.$assign            = "EPWM2";
+iEPWM2["EPWM#A"].$assign  = "GPIO2";
+iEPWM2["EPWM#B"].$assign  = "GPIO3";
+const iEPWM3              = scripting.addPeripheral("EPWM");
+iEPWM3.$name              = "W1";
+iEPWM3.$assign            = "EPWM3";
+iEPWM3["EPWM#A"].$assign  = "GPIO4";
+iEPWM3["EPWM#B"].$assign  = "GPIO5";
+const iEPWM4              = scripting.addPeripheral("EPWM");
+iEPWM4.$name              = "U2";
+iEPWM4.$assign            = "EPWM4";
+iEPWM4["EPWM#A"].$assign  = "GPIO6";
+iEPWM4["EPWM#B"].$assign  = "GPIO7";
+const iEPWM5              = scripting.addPeripheral("EPWM");
+iEPWM5.$name              = "V2";
+iEPWM5.$assign            = "EPWM5";
+iEPWM5["EPWM#A"].$assign  = "GPIO8";
+iEPWM5["EPWM#B"].$assign  = "GPIO9";
+const iEPWM6              = scripting.addPeripheral("EPWM");
+iEPWM6.$name              = "W2";
+iEPWM6.$assign            = "EPWM6";
+iEPWM6["EPWM#A"].$assign  = "GPIO10";
+iEPWM6["EPWM#B"].$assign  = "GPIO11";
+const iI2C1               = scripting.addPeripheral("I2C");
+iI2C1.$name               = "EEPROM";
+iI2C1.$assign             = "I2CA";
+iI2C1["SDA@"].$assign     = "GPIO28";
+iI2C1["SCL@"].$assign     = "GPIO29";
+const iJTAG1              = scripting.addPeripheral("JTAG");
+iJTAG1.$name              = "MyJTAG1";
+iJTAG1.TDO.$assign        = "GPIO37";
+iJTAG1.TDI.$assign        = "GPIO35";
+iJTAG1.TMS.$assign        = "GPIO36";
+iJTAG1.TCK.$assign        = "GPIO38";
+const iLIN1               = scripting.addPeripheral("LIN");
+iLIN1.$name               = "MyLIN1";
+iLIN1["LINTX@"].$assign   = "GPIO22";
+iLIN1["LINRX@"].$assign   = "GPIO23";
+const iSPI1               = scripting.addPeripheral("SPI");
+iSPI1.$name               = "SPI1";
+iSPI1["SPISIMO@"].$assign = "GPIO16";
+iSPI1["SPICLK@"].$assign  = "GPIO18";
+iSPI1["SPISTE@"].$used    = false;
+iSPI1["SPISOMI@"].$assign = "GPIO17";
+iSPI1["SPISOMI@"].$used   = true;
+const iSPI2               = scripting.addPeripheral("SPI");
+iSPI2.$name               = "SPI2";
+iSPI2["SPISIMO@"].$assign = "GPIO12";
+iSPI2["SPICLK@"].$assign  = "GPIO14";
+iSPI2["SPISTE@"].$used    = false;
+iSPI2["SPISOMI@"].$assign = "GPIO13";
+iSPI2["SPISOMI@"].$used   = true;
+
+/**
+ * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
+ * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
+ * re-solve from scratch.
+ */
+iJTAG1.$suggestSolution = "JTAG";
+iLIN1.$suggestSolution  = "LINA";
+iSPI1.$suggestSolution  = "SPIA";
+iSPI2.$suggestSolution  = "SPIB";
