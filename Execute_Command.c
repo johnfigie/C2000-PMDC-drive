@@ -16,6 +16,8 @@ extern void pulse_pwm(Uint16 axis, Uint16 pwm_value, Uint16 npulses);
 extern void scia_msg(char *);
 extern void pwm_on(Uint16 axis);
 extern void pwm_off(Uint16 axis);
+extern void eewrite(Uint16 eeaddress, Uint16 eedata);
+extern Uint16 eeread(Uint16 eeaddress);
 extern Uint16 CurrentU1;
 //function prototypes
 char* itoa( char * , Uint16);
@@ -26,6 +28,7 @@ int ExecuteCommand(char *ReceivedLine)
 {
 int axis = 0;
 int pwm_mag,npulses,pulse_pwm_mag;
+Uint16 eeaddress, eedata;
 char* token;
 const char s[2] = " ";
 //char output_buffer[80];
@@ -63,7 +66,7 @@ const char s[2] = " ";
 
             axis = atoi(token);
             itoa(output_buffer, CurrentU1);
-            scia_msg("\r\n");
+            scia_msg("\r\nADC reading");
             scia_msg(output_buffer);
             return (1);
 
@@ -108,13 +111,26 @@ const char s[2] = " ";
         if (strcmp(token, "eewrite") == 0)
         {
                 token = strtok(NULL, s);
-                eeaddress = atoi(token);    // address is 0 - 1022 these are byte addresses only even numbers are valid
+                eeaddress = atoi(token);    // address is 0 - 1022 these are byte addresses for 16b it words, only even numbers are valid
                 token = strtok(NULL, s);
+                if (token == '\x00') return (0);
                 eedata = atoi(token);       // data is 16 bits and must be on a even address.
                 eewrite((Uint16)eeaddress, (Uint16)eedata);
                 return (1);
 
         }
+        if (strcmp(token, "eeread") == 0)
+        {
+            token = strtok(NULL, s);
+
+            eeaddress = atoi(token);       // address is 0 - 1022 these are byte addresses for 16b it words, only even numbers are valid
+            itoa(output_buffer, eeread((Uint16)eeaddress));
+            scia_msg("\r\n");
+            scia_msg(output_buffer);
+            return (1);
+
+        }
+
 
 
         return (0);
@@ -126,7 +142,7 @@ char* itoa( char *output_buffer , Uint16 value)
 {
     int i,it;
     Uint16 temp;
-    const char* string1 = "ADC reading =";
+    const char* string1 = " =";
     const char* itoa_s = "0123456789";
     for (i=0; (string1[i] != '\x00'); i++)
     {

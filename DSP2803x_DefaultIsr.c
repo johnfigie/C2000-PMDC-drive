@@ -56,6 +56,11 @@
 #include "DSP2803x_Device.h"     // DSP2803x Headerfile Include File
 #include "DSP2803x_Examples.h"   // DSP2803x Examples Include File
 
+extern Uint16 cc_enable;
+extern Uint16 CurrentU1;
+extern Uint16 npulses1_last, npulses1;
+
+extern void pulse_pwm(Uint16 axis, Uint16 pwm_value, Uint16 npulses);
 //
 // INT13_ISR - Connected to INT13 of CPU (use MINT13 mask):
 // ISR can be used by the user.
@@ -411,21 +416,16 @@ __interrupt void
 ADCINT1_ISR(void)   
 {
     //
-    // Insert ISR Code here
-    //
+    if (cc_enable) GpioDataRegs.GPASET.bit.GPIO24 = 1;   // make CC pulse
 
-    //
-    // To receive more interrupts from this PIE group,
-    // acknowledge this interrupt
-    //
-    // PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+    CurrentU1 =  AdcResult.ADCRESULT0;
 
-    //
-    // Next two lines for debug only to halt the processor here
-    // Remove after inserting ISR Code
-    //
-    __asm ("      ESTOP0");
-    for(;;);
+    AdcRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;
+    GpioDataRegs.GPACLEAR.bit.GPIO24 = 1;   // finish CC pulse
+
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;   // Acknowledge interrupt to PIE
+
+    return;
 }
 
 //
@@ -755,21 +755,18 @@ __interrupt void
 EPWM1_INT_ISR(void)
 {
     //
-    // Insert ISR Code here
+    // Clear INT flag for this timer
     //
+    EPwm1Regs.ETCLR.bit.INT = 1;
+    //
+    // Acknowledge this interrupt to receive more interrupts from group 3
+    //
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
 
-    //
-    // To receive more interrupts from this PIE group,
-    // acknowledge this interrupt
-    //
-    // PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
+    if (npulses1_last == 1 & npulses1 == 0 ) pulse_pwm((Uint16) 1,(Uint16) 0, (Uint16) 0);
+    npulses1_last = npulses1;
+    if (npulses1 > 0) npulses1--;
 
-    //
-    // Next two lines for debug only to halt the processor here
-    // Remove after inserting ISR Code
-    //
-    __asm ("      ESTOP0");
-    for(;;);
 }
 
 //
@@ -779,21 +776,19 @@ __interrupt void
 EPWM2_INT_ISR(void)
 {
     //
-    // Insert ISR Code here
+    // Update the CMPA and CMPB values
     //
+    //update_compare(&epwm2_info);
 
     //
-    // To receive more interrupts from this PIE group,
-    // acknowledge this interrupt
+    // Clear INT flag for this timer
     //
-    // PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
+    EPwm2Regs.ETCLR.bit.INT = 1;
 
     //
-    // Next two lines for debug only to halt the processor here
-    // Remove after inserting ISR Code
+    // Acknowledge this interrupt to receive more interrupts from group 3
     //
-    __asm ("      ESTOP0");
-    for(;;);
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
 }
 
 //
@@ -827,21 +822,19 @@ __interrupt void
 EPWM4_INT_ISR(void)
 {
     //
-    // Insert ISR Code here
+    // Update the CMPA and CMPB values
     //
+    //update_compare(&epwm3_info);
 
     //
-    // To receive more interrupts from this PIE group,
-    // acknowledge this interrupt
+    // Clear INT flag for this timer
     //
-    // PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
+    EPwm3Regs.ETCLR.bit.INT = 1;
 
     //
-    // Next two lines for debug only to halt the processor here
-    // Remove after inserting ISR Code
+    // Acknowledge this interrupt to receive more interrupts from group 3
     //
-    __asm ("      ESTOP0");
-    for(;;);
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
 }
 
 //
@@ -1138,7 +1131,7 @@ I2CINT1A_ISR(void)
     //
 
     //
-    // To receive more interrupts from this PIE group,  
+    // To receive more interrupts from this PIE group,
     // acknowledge this interrupt
     //
     // PieCtrlRegs.PIEACK.all = PIEACK_GROUP8;
@@ -1150,7 +1143,6 @@ I2CINT1A_ISR(void)
     __asm ("      ESTOP0");
     for(;;);
 }
-
 //
 // I2CINT2A_ISR - INT8.2 I2C-A
 //
