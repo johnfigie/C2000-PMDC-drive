@@ -107,8 +107,8 @@ PAGE 0:    /* Program Memory */
    RAML1       : origin = 0x008800, length = 0x000400     /* on-chip RAM block L1 */
    OTP         : origin = 0x3D7800, length = 0x000400     /* on-chip OTP */
 
-   FLASHH      : origin = 0x3F0000, length = 0x001000     /* on-chip FLASH */
-   FLASHG      : origin = 0x3F1000, length = 0x001000     /* on-chip FLASH */
+   //FLASHH      : origin = 0x3F0000, length = 0x001000     /* on-chip FLASH */
+   FLASHG_H      : origin = 0x3F0000, length = 0x002000     /* on-chip FLASH */
    FLASHF      : origin = 0x3F2000, length = 0x001000     /* on-chip FLASH */
    FLASHE      : origin = 0x3F3000, length = 0x001000     /* on-chip FLASH */
    FLASHD      : origin = 0x3F4000, length = 0x001000     /* on-chip FLASH */
@@ -151,7 +151,7 @@ SECTIONS
    /* Allocate program areas: */
    .cinit              : > FLASHA      PAGE = 0
    .pinit              : > FLASHA,     PAGE = 0
-   .text               : > FLASHH      PAGE = 0
+   .text               : > FLASHG_H,      PAGE = 0
    codestart           : > BEGIN       PAGE = 0
    ramfuncs            : LOAD = FLASHD,
                          RUN = RAML0,

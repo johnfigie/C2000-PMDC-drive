@@ -275,14 +275,15 @@ InitEPwm2Example()
 //
     // Interrupt where we will change the Compare Values
     //
-    EPwm2Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event
+    EPwm2Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event -valley
+                                                  // EPwm2 is 180 phase shift from EPwm1
     EPwm2Regs.ETSEL.bit.INTEN = 1;                // Enable INT
-    EPwm2Regs.ETPS.bit.INTPRD = ET_3RD;           // Generate INT on 3rd event
+    EPwm2Regs.ETPS.bit.INTPRD = ET_1ST;           // Generate INT on 3rd event
 
 
     // Setup ADC SOC trigger
-    EPwm2Regs.ETSEL.bit.SOCBSEL = ET_CTRU_CMPB;
-    //
+    EPwm2Regs.ETSEL.bit.SOCASEL = ET_CTR_ZERO;  // use this for SOC 8 to start a new group of
+                                                // conversions.
     // Information this example uses to keep track of the direction the
     // CMPA/CMPB values are moving, the min and max allowed values and
     // a pointer to the correct ePWM registers
@@ -291,7 +292,7 @@ InitEPwm2Example()
     //
     // Start by increasing CMPA & increasing CMPB
     //
-    epwm2_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
+    /*epwm2_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
     epwm2_info.EPwm_CMPB_Direction = EPWM_CMP_UP;
 
     epwm2_info.EPwmTimerIntCount = 0;      //Zero the interrupt counter
@@ -299,7 +300,7 @@ InitEPwm2Example()
     epwm2_info.EPwmMaxCMPA = EPWM2_MAX_CMPA;  // Setup min/max CMPA/CMPB values
     epwm2_info.EPwmMinCMPA = EPWM2_MIN_CMPA;
     epwm2_info.EPwmMaxCMPB = EPWM2_MAX_CMPB;
-    epwm2_info.EPwmMinCMPB = EPWM2_MIN_CMPB;
+    epwm2_info.EPwmMinCMPB = EPWM2_MIN_CMPB; */
 }
 
 //

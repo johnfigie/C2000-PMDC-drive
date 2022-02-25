@@ -8,9 +8,6 @@
 #include "PMDC_drive.h"
 #include <stdio.h>
 #include <string.h>
-//
-// Typedefs
-//
 
 // external functions
 
@@ -19,6 +16,7 @@ extern int ExecuteCommand(char *);
 extern void Gpio_setup(void);
 extern void i2c_int1a_isr(void);
 extern void I2CA_Init(void);
+extern Uint16 eeread(Uint16 eeaddress);
 
 //
 // Functions Prototypes
@@ -29,15 +27,17 @@ void scia_xmit(char Char);
 void scia_msg(char *msg);
 void set_pwm(Uint16 axis, Uint16 pwm_value);
 void pulse_pwm(Uint16 axis, Uint16 pwm_value, Uint16 npulses);
+void pulse_cref(Uint16 axis, int16 cref_value,Uint16 npulses);
 void pwm_on(Uint16 axis);
 void pwm_off(Uint16 axis);
-
+void pwm_off_message(Uint16 axis);
 
 // pwm functions
 void InitEPwm1Example(void);
 void InitEPwm2Example(void);
 void InitEPwm4Example(void);
 void InitEPwm5Example(void);
+void pid(struct PID *axis);
 //
 // Defines
 //
@@ -52,9 +52,10 @@ void InitEPwm5Example(void);
 //
 Uint16 LoopCount;
 Uint16 ErrorCount;
-Uint16 CurrentU1;
+int16 ADCch[6];
+Uint16 ADCch_offset[6];
 Uint16 npulses1,npulses2,npulses1_last,npulses2_last;
-Uint16 cc_enable;
+
 
 struct I2CMSG I2cMsgOut1=
 {
@@ -82,6 +83,7 @@ Uint16 FailCount;
 
 
 
+struct PID axis1, axis2;
 
 //
 // Exeternal defines d by the linker
@@ -104,7 +106,6 @@ void main(void)
     npulses2 = 0;
     npulses1_last = 0;
     npulses2_last = 0;
-    cc_enable = 1; // start with CC pulse enabled
     CurrentMsgPtr = &I2cMsgOut1;
 
     //
@@ -182,6 +183,7 @@ void main(void)
     PieVectTable.I2CINT1A = &i2c_int1a_isr;
     EDIS;
     I2CA_Init();
+    pwm_off( (Uint16) 0);   // start with PWMs Off
     InitEPwm1Example();
     InitEPwm2Example();
     InitEPwm4Example();
@@ -223,6 +225,32 @@ void main(void)
     // EALLOW;
     Gpio_setup();
     //LoopCount = 0;
+    // Initialize PID structures
+    axis1.cref = 0;              //  0 amps due to 12 bit ADC input.
+    axis1.pgain = eeread(EE_CV_P1);
+    axis1.igain = eeread(EE_CV_I1);
+    axis1.ff = eeread(EE_CV_FF1);
+    axis1.iterm = 0;
+    axis1.pwm = 3750;
+    axis1.loop_mode = eeread(EE_CV_LM1);
+    axis1.input_mode = eeread(EE_CV_IM1);
+    axis1.cref_limit = eeread(EE_CV_CREFLIMIT1);
+    axis1.current_limit = eeread(EE_CV_CLIM1);
+
+    axis2.cref = 0;
+    axis2.pgain = eeread(EE_CV_P2);    // address for PI gain2
+    axis2.igain = eeread(EE_CV_I2);
+    axis2.ff = eeread(EE_CV_FF2);
+    axis2.iterm = 0;
+    axis2.pwm = 3750;
+    //  load ADC calibration values
+    ADCch_offset[0] = eeread(100);
+    ADCch_offset[1] = eeread(102);
+    ADCch_offset[2] = eeread(104);
+    ADCch_offset[3] = eeread(106);
+    ADCch_offset[4] = eeread(108);
+    ADCch_offset[5] = eeread(110);
+
     //
     // Enable I2C interrupt 1 in the PIE: Group 8 interrupt 1
     //
@@ -334,6 +362,7 @@ void main(void)
             if (escape_flag == -111) // test for F1 key escape_flag 11==F1, 12==F2, etc
             {
                 pwm_off((Uint16) 0);   // SW force all PWMs off
+                pwm_off_message((Uint16) 0);
                 ReceivedChar = (int) '\r';
                 ReceivedLine[j++] = (char) ReceivedChar;
                 escape_flag = -1;
@@ -355,6 +384,14 @@ void main(void)
         if (ExecuteCommand(ReceivedLine) == 0)
             scia_msg("\r\ncommand not found");
 
+        // check drive enables
+/*        if (PWM_Enable1 == 1){
+            pwm_on(1);
+        }
+        else {
+            pwm_off(1);
+            pwm_off_message(1);
+        } */
     }
 }
 
@@ -474,6 +511,7 @@ void set_pwm(Uint16 axis, Uint16 pwm_value)
 return;
 }
 void pulse_pwm(Uint16 axis, Uint16 pwm_value,Uint16 npulses)
+// npulses,npulses1 are global!
 {
     static Uint16 saved_pwm1,saved_pwm2;
     if (axis == 1)
@@ -509,6 +547,38 @@ void pulse_pwm(Uint16 axis, Uint16 pwm_value,Uint16 npulses)
     }
 return;
 }
+void pulse_cref(Uint16 axis, int16 cref_value,Uint16 npulses)
+{
+    static Uint16 saved_cref1,saved_cref2;
+    if (axis == 1)
+    {
+        if (npulses!=0)
+        {
+            saved_cref1 = axis1.cref;
+            axis1.cref = cref_value;
+            npulses1 = npulses;
+        }
+        else
+        {
+            axis1.cref = saved_cref1;
+        }
+
+    }
+    if (axis == 2)
+    {
+        if (npulses!=0)
+        {
+            saved_cref2 = axis2.cref;
+            axis2.cref = cref_value;
+            npulses2 = npulses;
+        }
+        else
+        {
+            axis2.cref = saved_cref2;
+        }
+    }
+return;
+}
 void pwm_off(Uint16 axis)  // force the pwm outputs off by sw
 {
     if (axis==1 | axis==0)
@@ -517,8 +587,6 @@ void pwm_off(Uint16 axis)  // force the pwm outputs off by sw
         EPwm1Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
         EPwm2Regs.AQCSFRC.bit.CSFA = AQ_CLEAR;
         EPwm2Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
-        cc_enable = 0;    // disable the CC signal to trigger scope
-        scia_msg("\r\nPWM 1 Disabled");          // this message takes time
     }
     if (axis==2 | axis==0)
     {
@@ -526,9 +594,20 @@ void pwm_off(Uint16 axis)  // force the pwm outputs off by sw
         EPwm4Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
         EPwm5Regs.AQCSFRC.bit.CSFA = AQ_CLEAR;
         EPwm5Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
-        cc_enable = 0;    // disable the CC signal to trigger scope
-        scia_msg("\r\nPWM 2 Disabled");
 
+    }
+
+return;
+}
+void pwm_off_message(Uint16 axis)  // inform user that PWMs are off
+{
+    if (axis==1 | axis==0)
+    {
+        scia_msg("\r\nPWM 1 Disabled");          // this message takes time
+    }
+    if (axis==2 | axis==0)
+    {
+        scia_msg("\r\nPWM 2 Disabled");
     }
 
 return;
@@ -553,10 +632,44 @@ void pwm_on(Uint16 axis)  // pwms are already set to run but outputs were forced
         scia_msg("\r\nPWM 2 Enabled");
 
     }
-    cc_enable = 1;
+
 return;
 }
 
+void run_loop(void)
+{
+    pid(&axis1);
+    pid(&axis2);
+    set_pwm((Uint16)1, axis1.pwm);
+    set_pwm((Uint16)2, axis2.pwm);
+}
+void pid(struct PID *axis)
+{
+int32 pterm,iterm,errorterm,cterm;
+
+    errorterm = ( axis->cref - axis->fb_current); // current is already opp sign so add
+    pterm = errorterm * (int32) axis->pgain * (int32) 64 ;
+    iterm = axis->iterm + errorterm * (int32) axis->igain;
+    if (iterm > 983040000) iterm = 983040000;
+    if (iterm < -983040000) iterm = -983040000;
+    axis->iterm = iterm;
+    cterm = ((pterm+iterm) >> 16) + 3750;
+    if (cterm > 7500) {
+        axis->pwm = 7500;
+    }
+    else if (cterm < 0) {
+        axis->pwm = 0;
+    }
+    else {
+        axis->pwm = cterm;
+    }
+
+    // add overload detection
+
+}
+
+
 //
 // End of File
+
 //

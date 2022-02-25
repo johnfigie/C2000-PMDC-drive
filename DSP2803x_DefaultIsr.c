@@ -55,12 +55,19 @@
 //
 #include "DSP2803x_Device.h"     // DSP2803x Headerfile Include File
 #include "DSP2803x_Examples.h"   // DSP2803x Examples Include File
+#include "PMDC_drive.h"
 
 extern Uint16 cc_enable;
-extern Uint16 CurrentU1;
+extern int16 ADCch[6];
+extern Uint16 ADCch_offset[6];
 extern Uint16 npulses1_last, npulses1;
-
+extern Uint16 LCNC_command1,LCNC_command2;
+extern struct PID axis1,axis2;
+extern void run_loop(void);
 extern void pulse_pwm(Uint16 axis, Uint16 pwm_value, Uint16 npulses);
+extern void pulse_cref(Uint16 axis, Uint16 cref_value, Uint16 npulses);
+extern void pwm_off(Uint16 axis);
+extern void pwm_off_message(Uint16 axis);
 //
 // INT13_ISR - Connected to INT13 of CPU (use MINT13 mask):
 // ISR can be used by the user.
@@ -416,15 +423,51 @@ __interrupt void
 ADCINT1_ISR(void)   
 {
     //
-    if (cc_enable) GpioDataRegs.GPASET.bit.GPIO24 = 1;   // make CC pulse
+    GpioDataRegs.GPASET.bit.GPIO24 = 1;   // make CC pulse
 
-    CurrentU1 =  AdcResult.ADCRESULT0;
+    ADCch[0] =  -(AdcResult.ADCRESULT0 - ADCch_offset[0]);  //current measurements are negative
+    ADCch[1] =  AdcResult.ADCRESULT1 - ADCch_offset[1];
+    ADCch[2] =  -(AdcResult.ADCRESULT2 - ADCch_offset[2]);
+    ADCch[3] =  AdcResult.ADCRESULT3 - ADCch_offset[3];
+    ADCch[4] =  AdcResult.ADCRESULT4 - ADCch_offset[4];
+    ADCch[5] =  AdcResult.ADCRESULT5 - ADCch_offset[5];
+    axis1.fb_current = ADCch[0];
+    axis2.fb_current = ADCch[2];
+    if (axis1.fb_current > axis1.current_limit | -axis1.fb_current > axis1.current_limit){
+        axis1.fault |= OVERCURRENT;
+        pwm_off(1);
+        }
+    if (axis2.fb_current > axis2.current_limit | -axis2.fb_current > axis2.current_limit){
+        axis2.fault |= OVERCURRENT;
+        pwm_off(2);
+        }
 
+    if (axis1.loop_mode == CLOSED_LOOP) {
+        if (axis1.input_mode == LCNC) {
+            axis1.cref = ADCch[4];
+            axis2.cref = ADCch[5];
+            if (axis1.cref > axis1.cref_limit) {
+                axis1.cref = axis1.cref_limit;
+                axis1.fault |= INPUT_SAT;
+            }
+            if (-axis1.cref > axis1.cref_limit) {
+                axis1.cref = -axis1.cref_limit;
+                axis1.fault |= INPUT_SAT;
+            }
+        }
+    run_loop();
+    }
+    else {
+        axis1.iterm = 0;
+        axis2.iterm = 0;
+        axis1.cref = 0;
+        axis2.cref = 0;
+    }
     AdcRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;
     GpioDataRegs.GPACLEAR.bit.GPIO24 = 1;   // finish CC pulse
 
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;   // Acknowledge interrupt to PIE
-
+    //GpioDataRegs.GPBDAT.bit.GPIO39;
     return;
 }
 
@@ -763,7 +806,15 @@ EPWM1_INT_ISR(void)
     //
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
 
-    if (npulses1_last == 1 & npulses1 == 0 ) pulse_pwm((Uint16) 1,(Uint16) 0, (Uint16) 0);
+    if (npulses1_last == 1 & npulses1 == 0 ) {
+        if (axis1.loop_mode == CLOSED_LOOP) {
+            pulse_cref( (Uint16) 1, (Uint16) 2048, (Uint16) 0);
+        }
+        else{
+            pulse_pwm((Uint16) 1,(Uint16) 0, (Uint16) 0);
+        }
+
+    }
     npulses1_last = npulses1;
     if (npulses1 > 0) npulses1--;
 
@@ -1375,24 +1426,18 @@ ADCINT4_ISR(void)
 // ADCINT5_ISR - INT10.5 ADC
 //
 __interrupt void 
-ADCINT5_ISR(void)
+ADCINT5_ISR(void)  // interrupt for control input conversion complete.
 {
-    //
-    // Insert ISR Code here
-    //
-    
-    //
-    // To receive more interrupts from this PIE group,
-    // acknowledge this interrupt
-    //
-    // PieCtrlRegs.PIEACK.all = PIEACK_GROUP10;
+    if (axis1.loop_mode == CLOSED_LOOP) {
+        if (axis1.input_mode == LCNC) {
+            axis1.cref = AdcResult.ADCRESULT4;
+            axis2.cref = AdcResult.ADCRESULT5;
+        }
+    run_loop();
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP10;
+    }
 
-    //
-    // Next two lines for debug only to halt the processor here
-    // Remove after inserting ISR Code
-    //
-    __asm ("      ESTOP0");
-    for(;;);
+
 }
 
 //
