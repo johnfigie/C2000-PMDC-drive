@@ -184,6 +184,7 @@ void main(void)
     EDIS;
     I2CA_Init();
     pwm_off( (Uint16) 0);   // start with PWMs Off
+    pwm_off_message( (Uint16) 0);
     InitEPwm1Example();
     InitEPwm2Example();
     InitEPwm4Example();
@@ -202,7 +203,7 @@ void main(void)
     //
     for (i = 0; i < I2C_MAX_BUFFER_SIZE; i++)
     {
-        I2cMsgIn1.MsgBuffer[i] = 1999;
+        I2cMsgIn1.MsgBuffer[i] = 0x0000;
     }
 
 

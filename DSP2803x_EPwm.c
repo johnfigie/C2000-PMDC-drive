@@ -203,7 +203,7 @@ InitEPwm1Example()
     //
     // Start by increasing CMPA & decreasing CMPB
     //
-    epwm1_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
+  /*  epwm1_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
     epwm1_info.EPwm_CMPB_Direction = EPWM_CMP_DOWN;
 
     epwm1_info.EPwmTimerIntCount = 0;      //Zero the interrupt counter
@@ -211,7 +211,7 @@ InitEPwm1Example()
     epwm1_info.EPwmMaxCMPA = EPWM1_MAX_CMPA;  // Setup min/max CMPA/CMPB values
     epwm1_info.EPwmMinCMPA = EPWM1_MIN_CMPA;
     epwm1_info.EPwmMaxCMPB = EPWM1_MAX_CMPB;
-    epwm1_info.EPwmMinCMPB = EPWM1_MIN_CMPB;
+    epwm1_info.EPwmMinCMPB = EPWM1_MIN_CMPB; */
 }
 // The proper procedure for enabling the ePWM clocks is as follows:
 // 1. Enable the individual ePWM module clocks. This is described in the specific device version of the
