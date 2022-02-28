@@ -433,11 +433,11 @@ ADCINT1_ISR(void)
     ADCch[5] =  AdcResult.ADCRESULT5 - ADCch_offset[5];
     axis1.fb_current = ADCch[0];
     axis2.fb_current = ADCch[2];
-    if (axis1.fb_current > axis1.current_limit | -axis1.fb_current > axis1.current_limit){
+    if (axis1.fb_current > axis1.current_limit || -axis1.fb_current > axis1.current_limit){
         axis1.fault |= OVERCURRENT;
         pwm_off(1);
         }
-    if (axis2.fb_current > axis2.current_limit | -axis2.fb_current > axis2.current_limit){
+    if (axis2.fb_current > axis2.current_limit || -axis2.fb_current > axis2.current_limit){
         axis2.fault |= OVERCURRENT;
         pwm_off(2);
         }

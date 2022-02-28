@@ -144,10 +144,14 @@ const char t[2] = "\015";
                 token = strtok(NULL, s);
                 pulse_pwm_mag = atoi(token);
                 token = strtok(NULL, s);
-                npulses = atoi(token);
-                scia_msg("\r\nPulsing CREF");
-                pulse_cref((Uint16) axis,(int16) pulse_pwm_mag, (Uint16) npulses);
-                return (1);
+                if (token){
+                    npulses = atoi(token);
+                    scia_msg("\r\nPulsing CREF");
+                    pulse_cref((Uint16) axis,(int16) pulse_pwm_mag, (Uint16) npulses);
+                    return (1);
+                }
+                else return(0);
+
         }
 
         if (strcmp(token, "r_axis") == 0)
@@ -223,6 +227,12 @@ const char t[2] = "\015";
                 scia_msg(output_buffer);
                 return (1);
             }
+            if (strcmp(token, "current_limit") == 0){
+                itoas(output_buffer, axisp->current_limit);
+                scia_msg("\r\naxisx.current_limit");
+                scia_msg(output_buffer);
+                return (1);
+            }
             if (strcmp(token, "fault") == 0){
                 itoa(output_buffer, (int32)axisp->fault);  // make this more user friendly
                 scia_msg("\r\naxisx.fault");
@@ -288,6 +298,21 @@ const char t[2] = "\015";
                 if (strcmp(token, "cref") == 0){
                     token = strtok(NULL, s);
                     axisp->cref = atoi(token);
+                    return (1);
+                }
+                if (strcmp(token, "cref_limit") == 0){
+                    token = strtok(NULL, s);
+                    axisp->cref_limit = atoi(token);
+                    return (1);
+                }
+                if (strcmp(token, "fault") == 0){
+                    token = strtok(NULL, s);
+                    axisp->fault = atoi(token);
+                    return (1);
+                }
+                if (strcmp(token, "current_limit") == 0){
+                    token = strtok(NULL, s);
+                    axisp->current_limit = atoi(token);
                     return (1);
                 }
                 return (0);

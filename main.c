@@ -237,6 +237,7 @@ void main(void)
     axis1.input_mode = eeread(EE_CV_IM1);
     axis1.cref_limit = eeread(EE_CV_CREFLIMIT1);
     axis1.current_limit = eeread(EE_CV_CLIM1);
+    axis1.fault = 0;
 
     axis2.cref = 0;
     axis2.pgain = eeread(EE_CV_P2);    // address for PI gain2

@@ -52,7 +52,7 @@ struct PID {
     Uint16 pwm;
     Uint16 loop_mode;
     Uint16 input_mode;
-    Uint16 current_limit;
+    int16 current_limit;
     Uint16 fault;
     int16 cref_limit;
 };
