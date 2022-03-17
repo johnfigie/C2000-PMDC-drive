@@ -1,4 +1,21 @@
 //###########################################################################
+//
+//    Copyright (C) 2021 John Figie
+//
+//    This program is free software; you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation; either version 2 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERinstTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program; if not, write to the Free Software
+//    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
+//
 
 
 //
@@ -108,76 +125,16 @@ void main(void)
     npulses2_last = 0;
     CurrentMsgPtr = &I2cMsgOut1;
 
-    //
-    // Step 1. Initialize System Control:
-    // PLL, WatchDog, enable Peripheral Clocks
-    // This example function is found in the DSP2803x_SysCtrl.c file.
-    //
     InitSysCtrl();
-
-    //
-    // Step 2. Initialize GPIO:
-    // This example function is found in the DSP2803x_Gpio.c file and
-    // illustrates how to set the GPIO to it's default state.
-    //
-    // InitGpio(); Skipped for this example
-
-    //
-    // For this example, only init the pins for the SCI-A port.
-    // This function is found in the DSP2803x_Sci.c file.
-    //
     GPIO_setPinMuxConfig();
-    //
-    // Step 3. Clear all interrupts and initialize PIE vector table:
-    // Disable CPU interrupts
-    //
     DINT;
-
-    //
-    // Initialize PIE control registers to their default state.
-    // The default state is all PIE interrupts disabled and flags
-    // are cleared.
-    // This function is found in the DSP2803x_PieCtrl.c file.
-    //
     InitPieCtrl();
-
-    //
-    // Disable CPU interrupts and clear all CPU interrupt flags:
-    //
     IER = 0x0000;
     IFR = 0x0000;
-
-    //
-    // Initialize the PIE vector table with pointers to the shell Interrupt
-    // Service Routines (ISR).
-    // This will populate the entire table, even if the interrupt
-    // is not used in this example.  This is useful for debug purposes.
-    // The shell ISR routines are found in DSP2803x_DefaultIsr.c.
-    // This function is found in DSP2803x_PieVect.c.
-    //
     InitPieVectTable();
-    //
-    // Interrupts that are used in this example are re-mapped to
-    // ISR functions found within this file.
-    //
-
-    //
-    // Step 4. Initialize all the Device Peripherals:
-    // Copy time critical code and Flash setup code to RAM
-    // This includes the following ISR functions:  InitFlash();
-    // The  RamfuncsLoadStart, RamfuncsLoadEnd, and RamfuncsRunStart
-    // symbols are created by the linker.
-    //
     memcpy((Uint16 *)&RamfuncsRunStart,(Uint16 *)&RamfuncsLoadStart,
             (unsigned long)&RamfuncsLoadSize);
-
-    //
-    // Initialize and Enable BLIN SCI module
-    //
     SetupSCI();
-    //
-    // Initialize the ePWM
-    //
     EALLOW;
     SysCtrlRegs.PCLKCR0.bit.TBCLKSYNC = 0;
     PieVectTable.I2CINT1A = &i2c_int1a_isr;
@@ -189,13 +146,7 @@ void main(void)
     InitEPwm2Example();
     InitEPwm4Example();
     InitEPwm5Example();
-
     InitAdc();  // For this example, init the ADC
-    //AdcOffsetSelfCal();
-
-    //
-    // Clear Counters for I2C
-    //
     PassCount = 0;
     FailCount = 0;
     //
@@ -205,28 +156,9 @@ void main(void)
     {
         I2cMsgIn1.MsgBuffer[i] = 0x0000;
     }
-
-
-
-    //
-    // Step 5. User specific code, enable interrupts:
-    //
-
-    //
-
-    //
-    // Call Flash Initialization to setup flash wait states
-    // This function must reside in RAM
-    //
     InitFlash();
-
-    //
-    // Step 5. User specific code:
-    //
-    // EALLOW;
     Gpio_setup();
-    //LoopCount = 0;
-    // Initialize PID structures
+    // Initialize axis control variable structures
     axis1.cref = 0;              //  0 amps due to 12 bit ADC input.
     axis1.pgain = eeread(EE_CV_P1);
     axis1.igain = eeread(EE_CV_I1);
@@ -278,21 +210,8 @@ void main(void)
     // Enable EPWM INTn in the PIE: Group 3 interrupt 1-3
     //
     PieCtrlRegs.PIEIER3.bit.INTx1 = 1;
-    //PieCtrlRegs.PIEIER3.bit.INTx2 = 1;
-    //PieCtrlRegs.PIEIER3.bit.INTx3 = 1;
-
-    //
-    // Enable global Interrupts and higher priority real-time debug events:
-    //
     EINT;       // Enable Global interrupt INTM
     ERTM;       // Enable Global realtime interrupt DBGM
-
-    //
-    // Step 6. IDLE loop. Just sit and loop forever (optional):
-    //
-
-
-
     //
     // Wait for SCI to be idle and ready for transmission
     //
@@ -301,8 +220,10 @@ void main(void)
 
     }
 
-    scia_msg("\r\nClausingDrive Monitor and control V0.0 \
-            \n\0");
+    scia_msg("\r\nC2000-PM_Motor_Drive V0.1\n\0");
+    scia_msg("\r\n Copyright 2021 John Figie\n\0");
+    scia_msg("\r\n License GPL V2.0 or newer\n\0");
+    scia_msg("\r\n C2000-PM_Motor_drive comes with ABSOLUTELY NO WARRANTY\n\0")
 
     for(;;)
     {

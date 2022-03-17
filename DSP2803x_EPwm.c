@@ -176,11 +176,11 @@ InitEPwm1Example()
     //
     // Active Low PWMs - Setup Deadband
     //
-    EPwm1Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;
+    EPwm1Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;   // Use rising edge and falling edges
     EPwm1Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;        // A is active High complementary
-    EPwm1Regs.DBCTL.bit.IN_MODE = DBA_ALL;
-    EPwm1Regs.DBRED = EPWM1_MIN_DB;
-    EPwm1Regs.DBFED = EPWM1_MIN_DB;
+    EPwm1Regs.DBCTL.bit.IN_MODE = DBA_ALL;      // PWM A is used for dead-band
+    EPwm1Regs.DBRED = EPWM1_MIN_DB;             // these settings correspond to mode 2
+    EPwm1Regs.DBFED = EPWM1_MIN_DB;             // in SPRU10 table 3-14
     //EPwm1_DB_Direction = DB_UP;  from example code for changing deadband example
  //
     // Interrupt where we will change the Compare Values
