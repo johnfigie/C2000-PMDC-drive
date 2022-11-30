@@ -22,6 +22,10 @@
  *  Created on: Jan 1, 2022
  *      Author: zephyr
  */
+//PWM Period
+#define EPWM_TIMER_PRD  7500  // Period register
+
+
 
 #ifndef PMDC_DRIVE_H_
 #define PMDC_DRIVE_H_
@@ -48,8 +52,11 @@
 #define EE_CV_LM2 0x98   // 152 loop mode (open or closed) -- not used
 #define EE_CV_IM2 0x9A  //  154 input mode LNCNC or monitor -- not used
 #define EE_CV_CLIM2 0x9C // 156 current limit exceeded
-#define EE_CV_FAUL2 0x9E // 158 Fault code
-#define EE_CV_CREFLIMIT3 0xA0 // 160 max input allowed.
+#define EE_CV_FAULT2 0x9E // 158 Fault code
+#define EE_CV_CREFLIMIT2 0xA0 // 160 max input allowed.
+
+#define EE_CV_BUS_UP 0xC8 // 200 Bus_Up threshold
+#define EE_CV_BUS_DOWN 0xCA // 202 Bus_Down threshold
 
 #define OPEN_LOOP 0
 #define CLOSED_LOOP 1
@@ -72,7 +79,9 @@ struct PID {
     Uint16 input_mode;
     int16 current_limit;
     Uint16 fault;
+    Uint16 fault_last;
     int16 cref_limit;
+    Uint16 state;
 };
 
 

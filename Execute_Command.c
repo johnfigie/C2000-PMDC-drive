@@ -38,8 +38,10 @@ extern void pwm_on(Uint16 axis);
 extern void pwm_off(Uint16 axis);
 extern void pwm_off_message(Uint16 axis);
 extern void eewrite(Uint16 eeaddress, Uint16 eedata);
+extern void iowrite(Uint16 io_number, Uint16 io_value);
+extern int16 ioread(Uint16 io_number);
 extern Uint16 eeread(Uint16 eeaddress);
-extern Uint16 ADCch[6];
+extern Uint16 ADCch[7];
 extern struct PID axis1,axis2;
 //function prototypes
 char* itoa( char * , int32);
@@ -51,7 +53,7 @@ int ExecuteCommand(char *ReceivedLine)
 int axis = 0;
 struct PID *axisp;
 int pwm_mag,npulses,pulse_pwm_mag;
-Uint16 eeaddress, eedata;
+Uint16 eeaddress, eedata, io_number, io_value;
 char* token;
 const char s[2] = " ";
 const char t[2] = "\015";
@@ -154,6 +156,30 @@ const char t[2] = "\015";
             return (1);
 
         }
+        if (strcmp(token, "ioread") == 0)
+        {
+            token = strtok(NULL, s);
+
+            io_number = atoi(token);       // address is 0 - 1022 these are byte addresses for 16b it words, only even numbers are valid
+            itoas(output_buffer, ioread((Uint16)io_number));
+            scia_msg("\r\n");
+            scia_msg(output_buffer);
+            return (1);
+
+        }
+        if (strcmp(token, "iowrite") == 0)
+        {
+            token = strtok(NULL, s);
+
+            io_number = atoi(token);       // io port number
+            token = strtok(NULL, s);
+            io_value = atoi(token);
+            iowrite((Uint16)io_number, (Uint16)io_value);
+            scia_msg("\r\n");
+            return (1);
+
+        }
+
         if (strcmp(token, "p_cref") == 0)
 
         {
@@ -257,6 +283,12 @@ const char t[2] = "\015";
                 scia_msg(output_buffer);
                 return (1);
             }
+            if (strcmp(token, "state") == 0){
+                itoa(output_buffer, (int32)axisp->state);  // make this more user friendly
+                scia_msg("\r\naxisx.state");
+                scia_msg(output_buffer);
+                return (1);
+            }
 
             return (0);
         }
@@ -331,6 +363,11 @@ const char t[2] = "\015";
                 if (strcmp(token, "current_limit") == 0){
                     token = strtok(NULL, s);
                     axisp->current_limit = atoi(token);
+                    return (1);
+                }
+                if (strcmp(token, "state") == 0){
+                    token = strtok(NULL, s);
+                    axisp->state = atoi(token);
                     return (1);
                 }
                 return (0);

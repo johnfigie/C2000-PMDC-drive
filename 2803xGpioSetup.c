@@ -92,18 +92,28 @@ Gpio_setup(void)
     //
     // Enable GPIO outputs on GPIO8 - GPIO11, set it high
     //
-    GpioCtrlRegs.GPBPUD.bit.GPIO43 = 0;   // Enable pullup on GPIO8
-    GpioDataRegs.GPBSET.bit.GPIO43 = 1;   // Load output latch
-    GpioCtrlRegs.GPBDIR.bit.GPIO43 = 1;   // GPIO8 = output
-
-    GpioCtrlRegs.GPAPUD.bit.GPIO27 = 0;   // Enable pullup on GPIO9
-    GpioDataRegs.GPASET.bit.GPIO27 = 1;   // Load output latch
+    GpioCtrlRegs.GPAPUD.bit.GPIO27 = 0;   // Disable pullup on GPI27
+    GpioDataRegs.GPACLEAR.bit.GPIO27 = 1;   // Clear output latch to keep Opto OFF
     GpioCtrlRegs.GPADIR.bit.GPIO27 = 1;   // GPIO9 = output
+
+    GpioCtrlRegs.GPAPUD.bit.GPIO30 = 1;   // pullup on GPI30
+    GpioDataRegs.GPASET.bit.GPIO30 = 1;   // Fan Control Initial State Fan OFF
+    GpioCtrlRegs.GPADIR.bit.GPIO30 = 1;   // GPIO9 = output
+
+    GpioCtrlRegs.GPAPUD.bit.GPIO31 = 0;   // Disable pullup on GPI31
+    GpioDataRegs.GPACLEAR.bit.GPIO31 = 1;   // Clear output latch to keep Opto OFF
+    GpioCtrlRegs.GPADIR.bit.GPIO31 = 1;   // GPIO9 = output
 
     GpioCtrlRegs.GPBPUD.bit.GPIO34 = 0;  // Enable pullup on GPIO10
     GpioDataRegs.GPBSET.bit.GPIO34 = 1;  // Load output latch
     GpioCtrlRegs.GPBDIR.bit.GPIO34 = 1;  // GPIO10 = output
 
+    GpioCtrlRegs.GPBPUD.bit.GPIO43 = 0;   // Enable pullup on GPIO8
+    GpioDataRegs.GPBSET.bit.GPIO43 = 1;   // Load output latch
+    GpioCtrlRegs.GPBDIR.bit.GPIO43 = 1;   // GPIO8 = output
+
+    GpioCtrlRegs.GPBDIR.bit.GPIO39 = 0;  // should be input by default
+    GpioCtrlRegs.GPBDIR.bit.GPIO44 = 0;  // should be input by default
 
     //
     // Enable SPI-A on GPIO16 - GPIO19

@@ -58,9 +58,9 @@
 #include "PMDC_drive.h"
 
 extern Uint16 cc_enable;
-extern int16 ADCch[6];
-extern Uint16 ADCch_offset[6];
-extern Uint16 npulses1_last, npulses1;
+extern int16 ADCch[10];
+extern Uint16 ADCch_offset[10];
+extern Uint16 npulses1_last, npulses1,npulses2_last, npulses2;
 extern Uint16 LCNC_command1,LCNC_command2;
 extern struct PID axis1,axis2;
 extern void run_loop(void);
@@ -68,6 +68,12 @@ extern void pulse_pwm(Uint16 axis, Uint16 pwm_value, Uint16 npulses);
 extern void pulse_cref(Uint16 axis, Uint16 cref_value, Uint16 npulses);
 extern void pwm_off(Uint16 axis);
 extern void pwm_off_message(Uint16 axis);
+extern void scia_msg(char *msg);
+static int16 cmd_cic_1[9] = {0,0,0,0,0,0,0,0,0};
+static int16 cmd_cic_2[9] = {0,0,0,0,0,0,0,0,0};
+static int16 cic_acc1 = 0;
+static int16 cic_acc2 = 0;
+static Uint16 head = 4,tail = 0;  // set to any value from 1 to 7
 //
 // INT13_ISR - Connected to INT13 of CPU (use MINT13 mask):
 // ISR can be used by the user.
@@ -420,19 +426,21 @@ USER12_ISR(void)
 // ADCINT1_ISR - INT1.1 ADC  (Can also be ISR for INT10.1 when enabled)
 //
 __interrupt void 
-ADCINT1_ISR(void)   
+ADCINT1_ISR(void)
+
 {
     //
-    GpioDataRegs.GPASET.bit.GPIO24 = 1;   // make CC pulse
+    //GpioDataRegs.GPASET.bit.GPIO24 = 1;   // make CC pulse started at end of conversion 6 by ADCINT2
 
-    ADCch[0] =  -(AdcResult.ADCRESULT0 - ADCch_offset[0]);  //current measurements are negative
-    ADCch[1] =  AdcResult.ADCRESULT1 - ADCch_offset[1];
-    ADCch[2] =  -(AdcResult.ADCRESULT2 - ADCch_offset[2]);
-    ADCch[3] =  AdcResult.ADCRESULT3 - ADCch_offset[3];
-    ADCch[4] =  AdcResult.ADCRESULT4 - ADCch_offset[4];
-    ADCch[5] =  AdcResult.ADCRESULT5 - ADCch_offset[5];
-    axis1.fb_current = ADCch[0];
-    axis2.fb_current = ADCch[2];
+    ADCch[0] =  -(AdcResult.ADCRESULT0 + AdcResult.ADCRESULT2 + AdcResult.ADCRESULT5 + AdcResult.ADCRESULT7 - ADCch_offset[0]);  //current measurements are negative
+    ADCch[1] =  -(AdcResult.ADCRESULT1 + AdcResult.ADCRESULT3 + AdcResult.ADCRESULT4 + AdcResult.ADCRESULT6 - ADCch_offset[1]);
+    ADCch[2] =  AdcResult.ADCRESULT8 - ADCch_offset[2]; // Bus Voltage
+    ADCch[3] =  AdcResult.ADCRESULT9 - ADCch_offset[3]; // Control Input for Axis 1
+    ADCch[4] =  AdcResult.ADCRESULT10 - ADCch_offset[4]; // Control Input for Axis 2
+    ADCch[5] =  AdcResult.ADCRESULT11 - ADCch_offset[5]; // IGBT temp Axis 1
+    ADCch[6] =  AdcResult.ADCRESULT12 - ADCch_offset[6]; // IGBT temp Axis 2
+    axis1.fb_current = ADCch[0]/2;
+    axis2.fb_current = ADCch[1]/2;
     if (axis1.fb_current > axis1.current_limit || -axis1.fb_current > axis1.current_limit){
         axis1.fault |= OVERCURRENT;
         pwm_off(1);
@@ -441,18 +449,35 @@ ADCINT1_ISR(void)
         axis2.fault |= OVERCURRENT;
         pwm_off(2);
         }
+    // run cic filter on command inputs
+    cic_acc1 += ADCch[3];
+    cic_acc2 += ADCch[4];
+    cmd_cic_1[head] = cic_acc1 ;
+    cmd_cic_2[head] = cic_acc2 ;
+    ADCch[7] = (cmd_cic_1[head] - cmd_cic_1[tail])/2;
+    ADCch[8] = (cmd_cic_2[head] - cmd_cic_2[tail])/2;
+    head = ++head & 7;
+    tail = ++tail & 7;
 
     if (axis1.loop_mode == CLOSED_LOOP) {
         if (axis1.input_mode == LCNC) {
-            axis1.cref = ADCch[4];
-            axis2.cref = ADCch[5];
+            axis1.cref = ADCch[7];
+            axis2.cref = ADCch[8];
             if (axis1.cref > axis1.cref_limit) {
                 axis1.cref = axis1.cref_limit;
-                axis1.fault |= INPUT_SAT;
+                if (axis1.state == 3) axis1.fault |= INPUT_SAT;
             }
             if (-axis1.cref > axis1.cref_limit) {
                 axis1.cref = -axis1.cref_limit;
-                axis1.fault |= INPUT_SAT;
+                if (axis1.state == 3) axis1.fault |= INPUT_SAT;
+            }
+            if (axis2.cref > axis2.cref_limit) {
+                axis2.cref = axis2.cref_limit;
+                if (axis2.state == 3) axis2.fault |= INPUT_SAT;
+            }
+            if (-axis2.cref > axis2.cref_limit) {
+                axis2.cref = -axis2.cref_limit;
+                if (axis2.state == 3) axis2.fault |= INPUT_SAT;
             }
         }
     run_loop();
@@ -463,12 +488,43 @@ ADCINT1_ISR(void)
         axis1.cref = 0;
         axis2.cref = 0;
     }
+
+    // the following code is not needed for normal operation
+    // it allows the p_cref and p_pwm functions to work
+    if (npulses1_last == 1 && npulses1 == 0 ) {
+        if (axis1.loop_mode == CLOSED_LOOP) {
+            pulse_cref( (Uint16) 1, (Uint16) 0, (Uint16) 0);
+        }
+        else{
+            pulse_pwm((Uint16) 1,(Uint16) 3750, (Uint16) 0);
+        }
+
+    }
+    if (npulses2_last == 1 && npulses2 == 0 ) {
+        if (axis1.loop_mode == CLOSED_LOOP) {
+            pulse_cref( (Uint16) 2, (Uint16) 0, (Uint16) 0);
+        }
+        else{
+            pulse_pwm((Uint16) 2,(Uint16) 3750, (Uint16) 0);
+        }
+
+    }
+    npulses1_last = npulses1;
+    npulses2_last = npulses2;
+
+    if (npulses1 > 0) npulses1--;
+    if (npulses2 > 0) npulses2--;
+
+    // end of code for p_cref and p_pwm functions
+
+    ServiceDog();
+    // finish the ISR
     AdcRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;
     GpioDataRegs.GPACLEAR.bit.GPIO24 = 1;   // finish CC pulse
 
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;   // Acknowledge interrupt to PIE
     //GpioDataRegs.GPBDAT.bit.GPIO39;
-    return;
+
 }
 
 //
@@ -487,12 +543,11 @@ ADCINT2_ISR(void)
     //
     // PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
 
-    //
-    // Next two lines for debug only to halt the processor here
-    // Remove after inserting ISR Code
-    //
-    __asm ("      ESTOP0");
-    for(;;);
+    GpioDataRegs.GPASET.bit.GPIO24 = 1;  // start CC pulse
+    AdcRegs.ADCINTFLGCLR.bit.ADCINT2 = 1;
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;   // Acknowledge interrupt to PIE
+
+
 }
 
 //
@@ -611,8 +666,13 @@ WAKEINT_ISR(void)
     // Next two lines for debug only to halt the processor here
     // Remove after inserting ISR Code
     //
-    __asm ("      ESTOP0");
-    for(;;);
+    scia_msg("\r\nwatch dog has bit Resetting\n\0");
+    pwm_off(1);
+    pwm_off(2);
+    EALLOW;
+    SysCtrlRegs.WDCR = 0;
+    EDIS;
+
 }
 
 //
@@ -800,23 +860,40 @@ EPWM1_INT_ISR(void)
     //
     // Clear INT flag for this timer
     //
+    GpioDataRegs.GPATOGGLE.bit.GPIO24 = 1;  //
+    GpioDataRegs.GPATOGGLE.bit.GPIO24 = 1;  //
+
     EPwm1Regs.ETCLR.bit.INT = 1;
     //
     // Acknowledge this interrupt to receive more interrupts from group 3
     //
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
 
-    if (npulses1_last == 1 & npulses1 == 0 ) {
+    if (npulses1_last == 1 && npulses1 == 0 ) {
         if (axis1.loop_mode == CLOSED_LOOP) {
-            pulse_cref( (Uint16) 1, (Uint16) 2048, (Uint16) 0);
+            pulse_cref( (Uint16) 1, (Uint16) 0, (Uint16) 0);
         }
         else{
-            pulse_pwm((Uint16) 1,(Uint16) 0, (Uint16) 0);
+            pulse_pwm((Uint16) 1,(Uint16) 3750, (Uint16) 0);
+        }
+
+    }
+    if (npulses2_last == 1 && npulses2 == 0 ) {
+        if (axis1.loop_mode == CLOSED_LOOP) {
+            pulse_cref( (Uint16) 2, (Uint16) 0, (Uint16) 0);
+        }
+        else{
+            pulse_pwm((Uint16) 2,(Uint16) 3750, (Uint16) 0);
         }
 
     }
     npulses1_last = npulses1;
+    npulses2_last = npulses2;
+
     if (npulses1 > 0) npulses1--;
+    if (npulses2 > 0) npulses2--;
+    GpioDataRegs.GPATOGGLE.bit.GPIO24 = 1;  //
+    GpioDataRegs.GPATOGGLE.bit.GPIO24 = 1;  //
 
 }
 

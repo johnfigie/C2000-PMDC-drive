@@ -39,108 +39,51 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // $
 //###########################################################################
-
+// Modifications by John Figie 2021/10/10
 //
 // Included Files
 //
 #include "DSP2803x_Device.h"     // DSP2803x Headerfile Include File
 #include "DSP2803x_Examples.h"   // DSP2803x Examples Include File
-
-typedef struct
-{
-    volatile struct EPWM_REGS *EPwmRegHandle;
-    Uint16 EPwm_CMPA_Direction;
-    Uint16 EPwm_CMPB_Direction;
-    Uint16 EPwmTimerIntCount;
-    Uint16 EPwmMaxCMPA;
-    Uint16 EPwmMinCMPA;
-    Uint16 EPwmMaxCMPB;
-    Uint16 EPwmMinCMPB;
-}EPWM_INFO;
-
-
-
-EPWM_INFO epwm1_info;
-EPWM_INFO epwm2_info;
-EPWM_INFO epwm4_info;
-EPWM_INFO epwm5_info;
+#include "PMDC_drive.h"
 
 // pwm defines
 //
 // Defines for the period for each timer
 //
-#define EPWM1_TIMER_TBPRD  7500  // Period register
-#define EPWM1_MAX_CMPA     (int)(EPWM1_TIMER_TBPRD *.8)
-#define EPWM1_MIN_CMPA       50
-#define EPWM1_MAX_CMPB     1950
-#define EPWM1_MIN_CMPB       50
-
-#define EPWM2_TIMER_TBPRD  7500  // Period register
-#define EPWM2_MAX_CMPA     1950
-#define EPWM2_MIN_CMPA       50
-#define EPWM2_MAX_CMPB     1950
-#define EPWM2_MIN_CMPB       50
-
-#define EPWM3_TIMER_TBPRD  7500  // Period register
-#define EPWM3_MAX_CMPA     1950
-#define EPWM3_MIN_CMPA       50
-#define EPWM3_MAX_CMPB     1950
-#define EPWM3_MIN_CMPB     1050
-
-#define EPWM4_TIMER_TBPRD  7500  // Period register
-#define EPWM4_MAX_CMPA     1950
-#define EPWM4_MIN_CMPA       50
-#define EPWM4_MAX_CMPB     1950
-#define EPWM4_MIN_CMPB       50
-
-#define EPWM5_TIMER_TBPRD  7500  // Period register
-#define EPWM5_MAX_CMPA     1950
-#define EPWM5_MIN_CMPA       50
-#define EPWM5_MAX_CMPB     1950
-#define EPWM5_MIN_CMPB       50
-
+#define EPWM1_TIMER_TBPRD  EPWM_TIMER_PRD  // Period register
+#define EPWM2_TIMER_TBPRD  EPWM_TIMER_PRD  // Period register
+#define EPWM3_TIMER_TBPRD  EPWM_TIMER_PRD  // Period register
+#define EPWM4_TIMER_TBPRD  EPWM_TIMER_PRD  // Period register
+#define EPWM5_TIMER_TBPRD  EPWM_TIMER_PRD  // Period register
+#define EPWM7_CMPA          7425     // SOC start for PWM 1-3
+#define EPWM7_CMPB          1825     // Optional SOC start for PWM 4-6
 
 
 //
 // Maximum Dead Band Defines
 //
-#define EPWM1_MAX_DB   0x03FF
-#define EPWM2_MAX_DB   0x03FF
-#define EPWM3_MAX_DB   0x03FF
 
 #define EPWM1_MIN_DB   20
 #define EPWM2_MIN_DB   20
-#define EPWM3_MIN_DB   0
+#define EPWM3_MIN_DB   20
 
 #define EPWM4_MIN_DB   20
 #define EPWM5_MIN_DB   20
-#define EPWM6_MIN_DB   0
-
-//
-// Defines that keep track of which way the Dead Band is moving
-//
-#define DB_UP   1
-#define DB_DOWN 0
-
-
-//
-// Defines that keep track of which way the compare value is moving
-//
-#define EPWM_CMP_UP   1
-#define EPWM_CMP_DOWN 0
+#define EPWM6_MIN_DB   20
 
 
 void
-InitEPwm1Example()
+InitEPwm1()
 {
     //
     // Setup TBCLK
     //
-    EPwm1Regs.TBPRD = EPWM1_TIMER_TBPRD;   // Set timer period 801 TBCLKs 2000 = 15.02 KHZ
+    EPwm1Regs.TBPRD = EPWM1_TIMER_TBPRD;   // Set timer period
     EPwm1Regs.TBPHS.half.TBPHS = 0x0000;   // Phase is 0
     EPwm1Regs.TBCTR = 0x0000;              // Clear counter
     EPwm1Regs.TBCTL.bit.SYNCOSEL = 01;     // select synch output on counter = 0 This will be
-                                           //   used to sync EPwm2 180 degrees out of phase.
+                                           //   used to sync EPwm2.
 
     //
     // Set Compare values
@@ -152,7 +95,7 @@ InitEPwm1Example()
     // Setup counter mode
     //
     EPwm1Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN; // Count up
-    EPwm1Regs.TBCTL.bit.PHSEN = TB_ENABLE;        // Disable phase loading
+    EPwm1Regs.TBCTL.bit.PHSEN = TB_DISABLE;        // Disable phase loading
     EPwm1Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;       // Clock ratio to SYSCLKOUT
     EPwm1Regs.TBCTL.bit.CLKDIV = TB_DIV1;
 
@@ -160,9 +103,9 @@ InitEPwm1Example()
     // Setup shadowing
     //
     EPwm1Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;
-    EPwm1Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
-    EPwm1Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;  // Load on Zero
-    EPwm1Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
+    EPwm1Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;        // B not used
+    EPwm1Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO_PRD;  // Load on Zero or period
+    EPwm1Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO_PRD;      // B not used
 
     //
     // Set actions
@@ -170,8 +113,8 @@ InitEPwm1Example()
     EPwm1Regs.AQCTLA.bit.CAU = AQ_SET;    // Set PWM1A on event A, up count
     EPwm1Regs.AQCTLA.bit.CAD = AQ_CLEAR;  // Clear PWM1A on event A, down count
 
-    EPwm1Regs.AQCTLB.bit.CBU = AQ_SET;   // Set PWM1B on event B, up count
-    EPwm1Regs.AQCTLB.bit.CBD = AQ_CLEAR; // Clear PWM1B on event B, down count
+    EPwm1Regs.AQCTLB.bit.CBU = AQ_SET;   // Set PWM1B on event B, up count -B not used
+    EPwm1Regs.AQCTLB.bit.CBD = AQ_CLEAR; // Clear PWM1B on event B, down count B not used
 
     //
     // Active Low PWMs - Setup Deadband
@@ -189,29 +132,12 @@ InitEPwm1Example()
     EPwm1Regs.ETSEL.bit.INTEN = 1;                 // Enable INT
 
     // Setup ADC SOC trigger
-    EPwm1Regs.ETSEL.bit.SOCASEL = ET_CTR_ZERO;   // Start Conversion on CTR = 0 (valley)
+    EPwm1Regs.ETSEL.bit.SOCASEL = ET_CTR_PRDZERO;   // Start Conversion peak and valley
     EPwm1Regs.ETSEL.bit.SOCAEN = 1;               // enable start of conversion
 
     EPwm1Regs.ETPS.bit.INTPRD = ET_1ST;            // Generate INT on 1st event
-    EPwm1Regs.ETPS.bit.SOCAPRD = 0b01;
+    EPwm1Regs.ETPS.bit.SOCAPRD = 0b01;             // Sets the SOC to occur on first event
     //
-    // Information this example uses to keep track of the direction the
-    // CMPA/CMPB values are moving, the min and max allowed values and
-    // a pointer to the correct ePWM registers
-    //
-
-    //
-    // Start by increasing CMPA & decreasing CMPB
-    //
-  /*  epwm1_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
-    epwm1_info.EPwm_CMPB_Direction = EPWM_CMP_DOWN;
-
-    epwm1_info.EPwmTimerIntCount = 0;      //Zero the interrupt counter
-    epwm1_info.EPwmRegHandle = &EPwm1Regs; //Set the pointer to the ePWM module
-    epwm1_info.EPwmMaxCMPA = EPWM1_MAX_CMPA;  // Setup min/max CMPA/CMPB values
-    epwm1_info.EPwmMinCMPA = EPWM1_MIN_CMPA;
-    epwm1_info.EPwmMaxCMPB = EPWM1_MAX_CMPB;
-    epwm1_info.EPwmMinCMPB = EPWM1_MIN_CMPB; */
 }
 // The proper procedure for enabling the ePWM clocks is as follows:
 // 1. Enable the individual ePWM module clocks. This is described in the specific device version of the
@@ -223,26 +149,27 @@ InitEPwm1Example()
 // InitEPwm2Example - EPwm2 example
 //
 void
-InitEPwm2Example()
+InitEPwm2()
 {
     //
     // Setup TBCLK
     //
-    EPwm2Regs.TBPRD = EPWM2_TIMER_TBPRD;        // Set timer period 801 TBCLKs
-    EPwm2Regs.TBPHS.half.TBPHS = EPWM2_TIMER_TBPRD;        // Phase is 180
+    EPwm2Regs.TBPRD = EPWM2_TIMER_TBPRD;        // Set timer period
+    EPwm2Regs.TBPHS.half.TBPHS = 0;        // Phase is 0
     EPwm2Regs.TBCTR = 0;                     // Default value - not important because
                                              //    pwm2 is synced to EPwm1
-    //
+    EPwm2Regs.TBCTL.bit.SYNCOSEL = TB_SYNC_IN ;  // select synch flow through
+                                           //   used to sync EPwm3.
+    EPwm2Regs.TBCTL.bit.PHSEN = TB_ENABLE;    // Slave module
     // Set Compare values
     //
     EPwm2Regs.CMPA.half.CMPA = (EPWM1_TIMER_TBPRD/2);     // Set compare A value
-    EPwm2Regs.CMPB = EPWM2_MAX_CMPB;               // Set Compare B value
 
     //
     // Setup counter mode
     //
     EPwm2Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN; // Count up
-    EPwm2Regs.TBCTL.bit.PHSEN = TB_ENABLE;        // Disable phase loading
+    EPwm2Regs.TBCTL.bit.PHSEN = TB_ENABLE;        // Load the time base counter with Syncin
     EPwm2Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;       // Clock ratio to SYSCLKOUT
     EPwm2Regs.TBCTL.bit.CLKDIV = TB_DIV1;
     EPwm2Regs.TBCTL.bit.SWFSYNC = 0;
@@ -252,17 +179,17 @@ InitEPwm2Example()
     //
     EPwm2Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;
     EPwm2Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
-    EPwm2Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;  // Load on Zero
-    EPwm2Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
+    EPwm2Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO_PRD;  // Load on Zero or period
+    EPwm2Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO_PRD;
 
     //
     // Set actions
     //
-    EPwm2Regs.AQCTLA.bit.CAU = AQ_CLEAR;    // Set PWM2A on event A, up count
-    EPwm2Regs.AQCTLA.bit.CAD = AQ_SET;  // Clear PWM2A on event B, down count
+    EPwm2Regs.AQCTLA.bit.CAU = AQ_SET;    // Set PWM2A on event A, up count
+    EPwm2Regs.AQCTLA.bit.CAD = AQ_CLEAR;  // Clear PWM2A on event B, down count
 
-    EPwm2Regs.AQCTLB.bit.CBU = AQ_CLEAR;        // Clear PWM2B on zero
-    EPwm2Regs.AQCTLB.bit.CBD = AQ_SET;       // Set PWM2B on period
+    EPwm2Regs.AQCTLB.bit.CBU = AQ_SET;        // Clear PWM2B on zero
+    EPwm2Regs.AQCTLB.bit.CBD = AQ_CLEAR;       // Set PWM2B on period
 
     //
     // Active Low PWMs - Setup Deadband
@@ -277,62 +204,47 @@ InitEPwm2Example()
     //
     EPwm2Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event -valley
                                                   // EPwm2 is 180 phase shift from EPwm1
-    EPwm2Regs.ETSEL.bit.INTEN = 1;                // Enable INT
+    EPwm2Regs.ETSEL.bit.INTEN = 0;                // Disable INT
     EPwm2Regs.ETPS.bit.INTPRD = ET_1ST;           // Generate INT on 3rd event
 
 
     // Setup ADC SOC trigger
     EPwm2Regs.ETSEL.bit.SOCASEL = ET_CTR_ZERO;  // use this for SOC 8 to start a new group of
                                                 // conversions.
-    // Information this example uses to keep track of the direction the
-    // CMPA/CMPB values are moving, the min and max allowed values and
-    // a pointer to the correct ePWM registers
-    //
-
-    //
-    // Start by increasing CMPA & increasing CMPB
-    //
-    /*epwm2_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
-    epwm2_info.EPwm_CMPB_Direction = EPWM_CMP_UP;
-
-    epwm2_info.EPwmTimerIntCount = 0;      //Zero the interrupt counter
-    epwm2_info.EPwmRegHandle = &EPwm2Regs; //Set the pointer to the ePWM module
-    epwm2_info.EPwmMaxCMPA = EPWM2_MAX_CMPA;  // Setup min/max CMPA/CMPB values
-    epwm2_info.EPwmMinCMPA = EPWM2_MIN_CMPA;
-    epwm2_info.EPwmMaxCMPB = EPWM2_MAX_CMPB;
-    epwm2_info.EPwmMinCMPB = EPWM2_MIN_CMPB; */
 }
-
 //
 // InitEPwm3Example - EPwm4 example
 //
 void
-InitEPwm4Example(void)
+InitEPwm4(void)
 {
     //
     // Setup TBCLK
     //
-    EPwm4Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN;// Count up/down
     EPwm4Regs.TBPRD = EPWM4_TIMER_TBPRD;          // Set timer period
-    EPwm4Regs.TBCTL.bit.PHSEN = TB_DISABLE;       // Disable phase loading
+    EPwm4Regs.TBCTL.bit.PHSEN = TB_ENABLE;       // Disable phase loading
     EPwm4Regs.TBPHS.half.TBPHS = 0x0000;          // Phase is 0
-    EPwm4Regs.TBCTR = 0x0000;                     // Clear counter
-    EPwm4Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;      // Clock ratio to SYSCLKOUT
+    //EPwm4Regs.TBCTR = 0x0000;                     // Clear counter
+    //
+    // Set Compare values
+    //
+    EPwm4Regs.CMPA.half.CMPA = (EPWM4_TIMER_TBPRD/2);    // Set compare A value
+    //
+    // Setup counter mode
+    //
+    EPwm4Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN; // Count up
+    EPwm4Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;       // Clock ratio to SYSCLKOUT
     EPwm4Regs.TBCTL.bit.CLKDIV = TB_DIV1;
+    EPwm4Regs.TBCTL.bit.SWFSYNC = 0;
 
     //
     // Setup shadow register load on ZERO
     //
     EPwm4Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;
     EPwm4Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
-    EPwm4Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;
-    EPwm4Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
+    EPwm4Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO_PRD; // load on zero or period
+    EPwm4Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO_PRD;
 
-    //
-    // Set Compare values
-    //
-    EPwm4Regs.CMPA.half.CMPA = EPWM4_MIN_CMPA;    // Set compare A value
-    EPwm4Regs.CMPB = EPWM4_MAX_CMPB;              // Set Compare B value
     //
     // Set actions
     //
@@ -356,54 +268,39 @@ InitEPwm4Example(void)
     //
     EPwm4Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event
     EPwm4Regs.ETSEL.bit.INTEN = 1;                // Enable INT
-    EPwm4Regs.ETPS.bit.INTPRD = ET_3RD;           // Generate INT on 3rd event
 
     //
-    // Information this example uses to keep track of the direction the
-    // CMPA/CMPB values are moving, the min and max allowed values and
-    // a pointer to the correct ePWM registers
-    //
-
-    //
-    // Start by increasing CMPA & decreasing CMPB
-    //
-    epwm4_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
-    epwm4_info.EPwm_CMPB_Direction = EPWM_CMP_DOWN;
-
-    epwm4_info.EPwmTimerIntCount = 0;     // Zero the interrupt counter
-    epwm4_info.EPwmRegHandle = &EPwm4Regs; //Set the pointer to the ePWM module
-    epwm4_info.EPwmMaxCMPA = EPWM4_MAX_CMPA;  // Setup min/max CMPA/CMPB values
-    epwm4_info.EPwmMinCMPA = EPWM4_MIN_CMPA;
-    epwm4_info.EPwmMaxCMPB = EPWM4_MAX_CMPB;
-    epwm4_info.EPwmMinCMPB = EPWM4_MIN_CMPB;
 }
 void
-InitEPwm5Example(void)
+InitEPwm5(void)
 {
     //
     // Setup TBCLK
     //
-    EPwm5Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN;// Count up/down
     EPwm5Regs.TBPRD = EPWM5_TIMER_TBPRD;          // Set timer period
-    EPwm5Regs.TBCTL.bit.PHSEN = TB_DISABLE;       // Disable phase loading
+    EPwm5Regs.TBCTL.bit.PHSEN = TB_ENABLE;       // Disable phase loading
     EPwm5Regs.TBPHS.half.TBPHS = 0x0000;          // Phase is 0
-    EPwm5Regs.TBCTR = 0x0000;                     // Clear counter
-    EPwm5Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;      // Clock ratio to SYSCLKOUT
+    //EPwm5Regs.TBCTR = 0x0000;                     // Clear counter
+    //
+    // Set Compare values
+    //
+    EPwm5Regs.CMPA.half.CMPA = (EPWM1_TIMER_TBPRD/2);     // Set compare A value
+    //
+    // Setup counter mode
+    //
+    EPwm5Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN; // Count up
+    EPwm5Regs.TBCTL.bit.PHSEN = TB_ENABLE;        // Load the time base counter with Syncin
+    EPwm5Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;       // Clock ratio to SYSCLKOUT
     EPwm5Regs.TBCTL.bit.CLKDIV = TB_DIV1;
+    EPwm5Regs.TBCTL.bit.SWFSYNC = 0;
 
     //
     // Setup shadow register load on ZERO
     //
     EPwm5Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;
     EPwm5Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
-    EPwm5Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;
-    EPwm5Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
-
-    //
-    // Set Compare values
-    //
-    EPwm5Regs.CMPA.half.CMPA = EPWM5_MIN_CMPA;    // Set compare A value
-    EPwm5Regs.CMPB = EPWM3_MAX_CMPB;              // Set Compare B value
+    EPwm5Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO_PRD;
+    EPwm5Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO_PRD;
 
     //
     // Set Actions
@@ -413,407 +310,97 @@ InitEPwm5Example(void)
 
     EPwm5Regs.AQCTLB.bit.CBU = AQ_SET;        // Clear PWM2B on zero
     EPwm5Regs.AQCTLB.bit.CBD = AQ_CLEAR;       // Set PWM2B on period
+    //
+    // Active Low PWMs - Setup Deadband
+    //
+    EPwm5Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;
+    EPwm5Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;
+    EPwm5Regs.DBCTL.bit.IN_MODE = DBA_ALL;
+    EPwm5Regs.DBRED = EPWM2_MIN_DB;
+    EPwm5Regs.DBFED = EPWM2_MIN_DB;
 
     //
     // Interrupt where we will change the Compare Values
     //
     EPwm5Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event
-    EPwm5Regs.ETSEL.bit.INTEN = 1;                // Enable INT
-    EPwm5Regs.ETPS.bit.INTPRD = ET_3RD;           // Generate INT on 3rd event
+    EPwm5Regs.ETSEL.bit.INTEN = 0;                // Enable INT
+    EPwm5Regs.ETPS.bit.INTPRD = ET_1ST;           // Generate INT on 3rd event
 
-    //
-    // Information this example uses to keep track of the direction the
-    // CMPA/CMPB values are moving, the min and max allowed values and
-    // a pointer to the correct ePWM registers
-    //
-
-    //
-    // Start by increasing CMPA & decreasing CMPB
-    //
-    epwm5_info.EPwm_CMPA_Direction = EPWM_CMP_UP;
-    epwm5_info.EPwm_CMPB_Direction = EPWM_CMP_DOWN;
-
-    epwm5_info.EPwmTimerIntCount = 0;     // Zero the interrupt counter
-    epwm5_info.EPwmRegHandle = &EPwm5Regs; //Set the pointer to the ePWM module
-    epwm5_info.EPwmMaxCMPA = EPWM5_MAX_CMPA;  // Setup min/max CMPA/CMPB values
-    epwm5_info.EPwmMinCMPA = EPWM5_MIN_CMPA;
-    epwm5_info.EPwmMaxCMPB = EPWM5_MAX_CMPB;
-    epwm5_info.EPwmMinCMPB = EPWM5_MIN_CMPB;
 }
 
-
-//
-// InitEPwm - This function initializes the EPwm(s) to a known state.
-//
-void 
-InitEPwm(void)
+void InitEPwm7(void)
 {
     //
-    // Initialize EPwm1/2/3/4/5/6/7
+    // Setup TBCLK
     //
+    EPwm7Regs.TBPRD = EPWM2_TIMER_TBPRD;        // Set timer period TBCLKs
+    EPwm7Regs.TBPHS.half.TBPHS = 0;        // Phase is 0
+    //EPwm7Regs.TBCTR = 0;                     // Default value - not important because
+                                             //    pwm2 is synced to EPwm1
+    //
+    // Set Compare values
+    //
+    EPwm7Regs.CMPA.half.CMPA = EPWM7_CMPA;     // Set compare A value
+    EPwm7Regs.CMPB = EPWM7_CMPB;                    // Set Compare B value
+
+    //
+    // Setup counter mode
+    //
+    EPwm7Regs.TBCTL.bit.CTRMODE = TB_COUNT_UP*2; // Count up * 2 will make samples only at peak 4 Khz update
+    EPwm7Regs.TBCTL.bit.PHSEN = TB_ENABLE;        // Load the time base counter with Syncin
+    EPwm7Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;       // Clock ratio to SYSCLKOUT
+    EPwm7Regs.TBCTL.bit.CLKDIV = TB_DIV1;
+    EPwm7Regs.TBCTL.bit.SWFSYNC = 0;
+
+    //
+    // Setup shadowing
+    //
+    EPwm7Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;
+    EPwm7Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
+    EPwm7Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;  // Load on Zero
+    EPwm7Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
+
+    //
+    // Set actions
+    //
+    EPwm7Regs.AQCTLA.bit.CAU = AQ_SET;    // Set PWM2A on event A, up count
+    EPwm7Regs.AQCTLA.bit.CAD = AQ_CLEAR;  // Clear PWM2A on down
+    EPwm7Regs.AQCTLA.bit.PRD = AQ_CLEAR;  // Clear on period
+    EPwm7Regs.AQCTLA.bit.ZRO = AQ_CLEAR;  // Clear on period
+
+    EPwm7Regs.AQCTLB.bit.CBU = AQ_SET;        // Clear PWM2B on B up count
+    EPwm7Regs.AQCTLB.bit.CBD = AQ_CLEAR;       // Clear PWM2A on down
+    EPwm7Regs.AQCTLB.bit.PRD = AQ_CLEAR;  // Clear on period
+    EPwm7Regs.AQCTLB.bit.ZRO = AQ_CLEAR;  // Clear on period
+
+    //
+    // Active Low PWMs - Setup Deadband
+    //
+    EPwm7Regs.DBCTL.bit.OUT_MODE = DB_DISABLE;
+    EPwm7Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;
+    EPwm7Regs.DBCTL.bit.IN_MODE = DBA_ALL;
+    EPwm7Regs.DBRED = EPWM2_MIN_DB;
+    EPwm7Regs.DBFED = EPWM2_MIN_DB;
+//
+    // Interrupt where we will change the Compare Values
+    //
+    EPwm7Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event -valley
+                                                  //
+    EPwm7Regs.ETSEL.bit.INTEN = 0;                // Disable INT
+    EPwm7Regs.ETPS.bit.INTPRD = ET_1ST;           // Generate INT on 1st event
+
+
+    // Setup ADC SOC trigger
+    EPwm7Regs.ETSEL.bit.SOCASEL = ET_CTRU_CMPA;  // use this for SOC 0 to start a new group of
+                                                // conversions.
+    EPwm7Regs.ETSEL.bit.SOCBSEL = ET_CTRU_CMPA;  // use this for SOC 8 to start a new group of
+                                                 // conversions with Axis2 pwm phase shifted (option)
+
+    EPwm7Regs.ETPS.bit.SOCAPRD = 0b01;             // Sets the SOC to occur on first event
+    EPwm7Regs.ETSEL.bit.SOCAEN = 1;               // enable start of conversion
+
 }
 
-//
-// InitEPwmGpio - This function initializes GPIO pins to function as EPwm pins
-//
-// Each GPIO pin can be configured as a GPIO pin or up to 3 different
-// peripheral functional pins. By default all pins come up as GPIO
-// inputs after reset.
-//
-void 
-InitEPwmGpio(void)
-{
-    InitEPwm1Gpio();    
-    InitEPwm2Gpio();
-    InitEPwm3Gpio();
-#if DSP28_EPWM4
-    InitEPwm4Gpio();
-#endif
-#if DSP28_EPWM5
-    InitEPwm5Gpio();
-#endif
-#if DSP28_EPWM6
-    InitEPwm6Gpio();
-#endif
-#if DSP28_EPWM7
-    InitEPwm7Gpio();
-#endif
-}
-
-//
-// InitEPwm1Gpio - This function initializes GPIO pins to function as EPwm1
-//
-void 
-InitEPwm1Gpio(void)
-{
-    EALLOW;
-
-    //
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption
-    // Pull-ups can be enabled or disabled by the user.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAPUD.bit.GPIO0 = 1;    // Disable pull-up on GPIO0 (EPWM1A)
-    GpioCtrlRegs.GPAPUD.bit.GPIO1 = 1;    // Disable pull-up on GPIO1 (EPWM1B)
-
-    //
-    // Configure EPWM-1 pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be
-    // EPWM1 functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAMUX1.bit.GPIO0 = 1;   // Configure GPIO0 as EPWM1A
-    GpioCtrlRegs.GPAMUX1.bit.GPIO1 = 1;   // Configure GPIO1 as EPWM1B
-
-    EDIS;
-}
-
-//
-// InitEPwm2Gpio - This function initializes GPIO pins to function as EPwm2
-//
-void 
-InitEPwm2Gpio(void)
-{
-    EALLOW;
-
-    //
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAPUD.bit.GPIO2 = 1;    // Disable pull-up on GPIO2 (EPWM2A)
-    GpioCtrlRegs.GPAPUD.bit.GPIO3 = 1;    // Disable pull-up on GPIO3 (EPWM2B)
-
-    //
-    // Configure EPwm-2 pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be
-    // EPWM2 functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAMUX1.bit.GPIO2 = 1;   // Configure GPIO2 as EPWM2A
-    GpioCtrlRegs.GPAMUX1.bit.GPIO3 = 1;   // Configure GPIO3 as EPWM2B
-
-    EDIS;
-}
-
-//
-// InitEPwm3Gpio - This function initializes GPIO pins to function as EPwm3
-//
-void 
-InitEPwm3Gpio(void)
-{
-    EALLOW;
-
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption 
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAPUD.bit.GPIO4 = 1;    // Disable pull-up on GPIO4 (EPWM3A)
-    GpioCtrlRegs.GPAPUD.bit.GPIO5 = 1;    // Disable pull-up on GPIO5 (EPWM3B)
-
-    //
-    // Configure EPwm-3 pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be
-    // EPWM3 functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAMUX1.bit.GPIO4 = 1;   // Configure GPIO4 as EPWM3A
-    GpioCtrlRegs.GPAMUX1.bit.GPIO5 = 1;   // Configure GPIO5 as EPWM3B
-
-    EDIS;
-}
-
-#if DSP28_EPWM4
-//
-// InitEPwm4Gpio - This function initializes GPIO pins to function as EPwm4
-//
-void 
-InitEPwm4Gpio(void)
-{
-    EALLOW;
-    
-    //
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption 
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAPUD.bit.GPIO6 = 1;    // Disable pull-up on GPIO6 (EPWM4A)
-    GpioCtrlRegs.GPAPUD.bit.GPIO7 = 1;    // Disable pull-up on GPIO7 (EPWM4B)
-
-    //
-    // Configure EPWM-4 pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be
-    // EPWM4 functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAMUX1.bit.GPIO6 = 1;   // Configure GPIO6 as EPWM4A
-    GpioCtrlRegs.GPAMUX1.bit.GPIO7 = 1;   // Configure GPIO7 as EPWM4B
-
-    EDIS;
-}
-#endif
-
-#if DSP28_EPWM5
-//
-// InitEPwm5Gpio - This function initializes GPIO pins to function as EPwm5
-//
-void 
-InitEPwm5Gpio(void)
-{
-    EALLOW;
-    
-    //
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAPUD.bit.GPIO8 = 1;    // Disable pull-up on GPIO8 (EPWM5A)
-    GpioCtrlRegs.GPAPUD.bit.GPIO9 = 1;    // Disable pull-up on GPIO9 (EPWM5B)
-
-    //
-    // Configure EPWM-5 pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be 
-    // EPWM5 functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAMUX1.bit.GPIO8 = 1;   // Configure GPIO8 as EPWM5A
-    GpioCtrlRegs.GPAMUX1.bit.GPIO9 = 1;   // Configure GPIO9 as EPWM5B
-
-    EDIS;
-}
-#endif
-
-#if DSP28_EPWM6
-//
-// InitEPwm6Gpio - This function initializes GPIO pins to function as EPwm6
-//
-void 
-InitEPwm6Gpio(void)
-{
-    EALLOW;
-    
-    //
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAPUD.bit.GPIO10 = 1;   // Disable pull-up on GPIO10 (EPWM6A)
-    GpioCtrlRegs.GPAPUD.bit.GPIO11 = 1;   // Disable pull-up on GPIO11 (EPWM6B)
-
-    //
-    // Configure EPWM-6 pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be 
-    // EPWM6 functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAMUX1.bit.GPIO10 = 1;   // Configure GPIO10 as EPWM6A
-    GpioCtrlRegs.GPAMUX1.bit.GPIO11 = 1;   // Configure GPIO11 as EPWM6B
-
-    EDIS;
-}
-#endif
-
-#if DSP28_EPWM7
-//
-// InitEPwm7Gpio - This function initializes GPIO pins to function as EPwm7
-//
-void 
-InitEPwm7Gpio(void)
-{
-    EALLOW;
-    
-    //
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPBPUD.bit.GPIO40 = 1;  // Disable pull-up on GPIO40 (EPWM7A)
-    GpioCtrlRegs.GPBPUD.bit.GPIO41 = 1;  // Disable pull-up on GPIO41 (EPWM7B)
-
-    //
-    // Configure EPWM-7 pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be
-    // EPWM7 functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPBMUX1.bit.GPIO40 = 1;   // Configure GPIO40 as EPWM7A
-    GpioCtrlRegs.GPBMUX1.bit.GPIO41 = 1;   // Configure GPIO41 as EPWM7B
-
-    EDIS;
-}
-#endif
-
-//
-// InitEPwmSyncGpio - This function initializes GPIO pins to function as 
-// EPwm Synch pins
-//
-void 
-InitEPwmSyncGpio(void)
-{
-    //
-    // EALLOW;
-    //
-
-    //
-    // Configure EPWMSYNCI
-    //
-
-    //
-    // Enable internal pull-up for the selected pins
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    //GpioCtrlRegs.GPAPUD.bit.GPIO6 = 0; //Enable pull-up on GPIO6 (EPWMSYNCI)
-    GpioCtrlRegs.GPBPUD.bit.GPIO32 = 0;  //Enable pull-up on GPIO32 (EPWMSYNCI)
-
-    //
-    // Set qualification for selected pins to asynch only
-    // This will select synch to SYSCLKOUT for the selected pins.
-    // Comment out other unwanted lines.
-    //
-    //GpioCtrlRegs.GPAQSEL1.bit.GPIO6 = 0; //Synch SYSCLKOUT GPIO6(EPWMSYNCI)
-    GpioCtrlRegs.GPBQSEL1.bit.GPIO32 = 0;  //Synch SYSCLKOUT GPIO32(EPWMSYNCI)
-
-    //
-    // Configure EPwmSync pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be 
-    // EPwmSync functional pins.
-    // Comment out other unwanted lines.
-    //
-    //GpioCtrlRegs.GPAMUX1.bit.GPIO6 = 2;  //Configures GPIO6 for EPWMSYNCI
-    GpioCtrlRegs.GPBMUX1.bit.GPIO32 = 2;   //Configures GPIO32 for EPWMSYNCI
-
-    //
-    // Configure EPWMSYNC0
-    //
-
-    //
-    // Disable internal pull-up for the selected output pins
-    // for reduced power consumption
-    // Pull-ups can be enabled or disabled by the user.
-    // Comment out other unwanted lines.
-    //
-    //GpioCtrlRegs.GPAPUD.bit.GPIO6 = 1; //Disable pull-up on GPIO6(EPWMSYNCO)
-    GpioCtrlRegs.GPBPUD.bit.GPIO33 = 1;  //Disable pull-up on GPIO33(EPWMSYNCO)
-
-    //GpioCtrlRegs.GPAMUX1.bit.GPIO6 = 3; //Configures GPIO6 for EPWMSYNCO
-    GpioCtrlRegs.GPBMUX1.bit.GPIO33 = 2;  //Configures GPIO33 for EPWMSYNCO
-}
-
-//
-// InitTzGpio - This function initializes GPIO pins to function as 
-// Trip Zone (TZ) pins
-//
-// Each GPIO pin can be configured as a GPIO pin or up to 3 different
-// peripheral functional pins. By default all pins come up as GPIO
-// inputs after reset.
-//
-void 
-InitTzGpio(void)
-{
-    EALLOW;
-
-    //
-    // Enable internal pull-up for the selected pins
-    // Pull-ups can be enabled or disabled by the user.
-    // This will enable the pullups for the specified pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAPUD.bit.GPIO12 = 0;    // Enable pull-up on GPIO12 (TZ1)
-    //GpioCtrlRegs.GPAPUD.bit.GPIO15 = 0;    // Enable pull-up on GPIO15 (TZ1)
-    GpioCtrlRegs.GPAPUD.bit.GPIO13 = 0;    // Enable pull-up on GPIO13 (TZ2)
-    //GpioCtrlRegs.GPAPUD.bit.GPIO16 = 0;    // Enable pull-up on GPIO16 (TZ2)
-    //GpioCtrlRegs.GPAPUD.bit.GPIO28 = 0;    // Enable pull-up on GPIO28 (TZ2)
-    GpioCtrlRegs.GPAPUD.bit.GPIO14 = 0;    // Enable pull-up on GPIO14 (TZ3)
-    //GpioCtrlRegs.GPAPUD.bit.GPIO17 = 0;    // Enable pull-up on GPIO17 (TZ3)
-    //GpioCtrlRegs.GPAPUD.bit.GPIO29 = 0;    // Enable pull-up on GPIO29 (TZ3)
-
-    //
-    // Set qualification for selected pins to asynch only
-    // Inputs are synchronized to SYSCLKOUT by default.
-    // This will select asynch (no qualification) for the selected pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAQSEL1.bit.GPIO12 = 3;  // Asynch input GPIO12 (TZ1)
-    //GpioCtrlRegs.GPAQSEL1.bit.GPIO15 = 3;  // Asynch input GPIO15 (TZ1)
-    GpioCtrlRegs.GPAQSEL1.bit.GPIO13 = 3;  // Asynch input GPIO13 (TZ2)
-    //GpioCtrlRegs.GPAQSEL2.bit.GPIO16 = 3;  // Asynch input GPIO16 (TZ2)
-    //GpioCtrlRegs.GPAQSEL2.bit.GPIO28 = 3;  // Asynch input GPIO28 (TZ2)
-    GpioCtrlRegs.GPAQSEL1.bit.GPIO14 = 3;  // Asynch input GPIO14 (TZ3)
-    //GpioCtrlRegs.GPAQSEL2.bit.GPIO17 = 3;  // Asynch input GPIO17 (TZ3)
-    //GpioCtrlRegs.GPAQSEL2.bit.GPIO29 = 3;  // Asynch input GPIO29 (TZ3)
-
-    //
-    // Configure TZ pins using GPIO regs
-    // This specifies which of the possible GPIO pins will be TZ 
-    // functional pins.
-    // Comment out other unwanted lines.
-    //
-    GpioCtrlRegs.GPAMUX1.bit.GPIO12 = 1;  // Configure GPIO12 as TZ1
-    //GpioCtrlRegs.GPAMUX1.bit.GPIO15 = 1;  // Configure GPIO15 as TZ1
-    GpioCtrlRegs.GPAMUX1.bit.GPIO13 = 1;  // Configure GPIO13 as TZ2
-    //GpioCtrlRegs.GPAMUX2.bit.GPIO16 = 3;  // Configure GPIO16 as TZ2
-    //GpioCtrlRegs.GPAMUX2.bit.GPIO28 = 3;  // Configure GPIO28 as TZ2
-    GpioCtrlRegs.GPAMUX1.bit.GPIO14 = 1;  // Configure GPIO14 as TZ3
-    //GpioCtrlRegs.GPAMUX2.bit.GPIO17 = 3;  // Configure GPIO17 as TZ3
-    //GpioCtrlRegs.GPAMUX2.bit.GPIO29 = 3;  // Configure GPIO29 as TZ3
-
-    EDIS;
-}
 
 //
 // End of file

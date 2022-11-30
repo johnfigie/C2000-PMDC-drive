@@ -34,6 +34,9 @@ extern void Gpio_setup(void);
 extern void i2c_int1a_isr(void);
 extern void I2CA_Init(void);
 extern Uint16 eeread(Uint16 eeaddress);
+extern int16 ioread(Uint16 io_number);
+extern void iowrite(Uint16 io_number, Uint16 io_value);
+extern char* itoa( char * , int32);
 
 //
 // Functions Prototypes
@@ -48,12 +51,16 @@ void pulse_cref(Uint16 axis, int16 cref_value,Uint16 npulses);
 void pwm_on(Uint16 axis);
 void pwm_off(Uint16 axis);
 void pwm_off_message(Uint16 axis);
+Uint16 bus_state(int16 bus_measurement);
 
+
+extern void watchdoginit(void);
 // pwm functions
-void InitEPwm1Example(void);
-void InitEPwm2Example(void);
-void InitEPwm4Example(void);
-void InitEPwm5Example(void);
+extern void InitEPwm1(void);
+extern void InitEPwm2(void);
+extern void InitEPwm4(void);
+extern void InitEPwm5(void);
+extern void InitEPwm7(void);
 void pid(struct PID *axis);
 //
 // Defines
@@ -69,9 +76,10 @@ void pid(struct PID *axis);
 //
 Uint16 LoopCount;
 Uint16 ErrorCount;
-int16 ADCch[6];
-Uint16 ADCch_offset[6];
+int16 ADCch[10];
+Uint16 ADCch_offset[10];
 Uint16 npulses1,npulses2,npulses1_last,npulses2_last;
+Uint16 bus_up_threshold,bus_down_threshold;
 
 
 struct I2CMSG I2cMsgOut1=
@@ -95,12 +103,11 @@ struct I2CMSG I2cMsgIn1=
 };
 
 struct I2CMSG *CurrentMsgPtr;       // Used in interrupts
-Uint16 PassCount;
-Uint16 FailCount;
 
 
 
 struct PID axis1, axis2;
+
 
 //
 // Exeternal defines d by the linker
@@ -114,8 +121,8 @@ extern Uint16 RamfuncsRunStart;
 //
 void main(void)
 {
-    Uint16 ReceivedChar,i;
-    char ReceivedLine[80];
+    Uint16 ReceivedChar,i,bus_up;
+    char ReceivedLine[80], output_buffer[80];
     int j,jl;
     jl = 0;
     int escape_flag = 0;
@@ -123,7 +130,11 @@ void main(void)
     npulses2 = 0;
     npulses1_last = 0;
     npulses2_last = 0;
+    bus_up = 0;
     CurrentMsgPtr = &I2cMsgOut1;
+    Uint32 fault_temp;
+    memcpy((Uint16 *)&RamfuncsRunStart,(Uint16 *)&RamfuncsLoadStart,
+            (unsigned long)&RamfuncsLoadSize);
 
     InitSysCtrl();
     GPIO_setPinMuxConfig();
@@ -132,8 +143,8 @@ void main(void)
     IER = 0x0000;
     IFR = 0x0000;
     InitPieVectTable();
-    memcpy((Uint16 *)&RamfuncsRunStart,(Uint16 *)&RamfuncsLoadStart,
-            (unsigned long)&RamfuncsLoadSize);
+//    memcpy((Uint16 *)&RamfuncsRunStart,(Uint16 *)&RamfuncsLoadStart,
+//            (unsigned long)&RamfuncsLoadSize);
     SetupSCI();
     EALLOW;
     SysCtrlRegs.PCLKCR0.bit.TBCLKSYNC = 0;
@@ -142,13 +153,15 @@ void main(void)
     I2CA_Init();
     pwm_off( (Uint16) 0);   // start with PWMs Off
     pwm_off_message( (Uint16) 0);
-    InitEPwm1Example();
-    InitEPwm2Example();
-    InitEPwm4Example();
-    InitEPwm5Example();
+    InitEPwm1();
+    InitEPwm2();
+    InitEPwm4();
+    InitEPwm5();
+    InitEPwm7();
+    SysCtrlRegs.PCLKCR0.bit.TBCLKSYNC = 1;   // sync all pwms
     InitAdc();  // For this example, init the ADC
-    PassCount = 0;
-    FailCount = 0;
+    InitAdcAio();
+
     //
     // Clear incoming message buffer for I2C
     //
@@ -159,7 +172,7 @@ void main(void)
     InitFlash();
     Gpio_setup();
     // Initialize axis control variable structures
-    axis1.cref = 0;              //  0 amps due to 12 bit ADC input.
+    axis1.cref = eeread(EE_CV_CREF1);              //  0 amps due to 12 bit ADC input.
     axis1.pgain = eeread(EE_CV_P1);
     axis1.igain = eeread(EE_CV_I1);
     axis1.ff = eeread(EE_CV_FF1);
@@ -169,21 +182,26 @@ void main(void)
     axis1.input_mode = eeread(EE_CV_IM1);
     axis1.cref_limit = eeread(EE_CV_CREFLIMIT1);
     axis1.current_limit = eeread(EE_CV_CLIM1);
-    axis1.fault = 0;
 
-    axis2.cref = 0;
+    axis2.cref = eeread(EE_CV_CREF2);
     axis2.pgain = eeread(EE_CV_P2);    // address for PI gain2
     axis2.igain = eeread(EE_CV_I2);
     axis2.ff = eeread(EE_CV_FF2);
     axis2.iterm = 0;
     axis2.pwm = 3750;
+    axis2.cref_limit = eeread(EE_CV_CREFLIMIT2);
+    axis2.current_limit = eeread(EE_CV_CLIM2);
     //  load ADC calibration values
-    ADCch_offset[0] = eeread(100);
-    ADCch_offset[1] = eeread(102);
-    ADCch_offset[2] = eeread(104);
-    ADCch_offset[3] = eeread(106);
-    ADCch_offset[4] = eeread(108);
-    ADCch_offset[5] = eeread(110);
+    ADCch_offset[0] = eeread(100);  //Axis 1 Uphase amps
+    ADCch_offset[1] = eeread(102);  //Axis 2 Uphase amps
+    ADCch_offset[2] = eeread(104);  // Bus Volts
+    ADCch_offset[3] = eeread(106);  //Axis 1 Control in
+    ADCch_offset[4] = eeread(108);  //Axis 2 Control in
+    ADCch_offset[5] = eeread(110);  // Axis 1 IGBT temp
+    ADCch_offset[6] = eeread(112);  // Axis 2 IGBT temp
+    //
+    bus_up_threshold = eeread(EE_CV_BUS_UP);
+    bus_down_threshold = eeread(EE_CV_BUS_DOWN);
 
     //
     // Enable I2C interrupt 1 in the PIE: Group 8 interrupt 1
@@ -199,22 +217,27 @@ void main(void)
 
 
     //
-    // Enable CPU INT3 which is connected to EPWM1-3 INT:
+    // Enable ADC Interrupts in the PIEIER1 group register
     //
+    // now enable the interrupts for ADC with limit checks
+
     PieCtrlRegs.PIEIER1.bit.INTx1 = 1; // Enable INT 1.1 in the PIE
+    PieCtrlRegs.PIEIER1.bit.INTx2 = 1; // Enable INT 1.2 in the PIE
 
     IER |= M_INT3;
     IER |= M_INT1;  // ADC interrupt
 
     //
-    // Enable EPWM INTn in the PIE: Group 3 interrupt 1-3
+    // Disable EPWM INTn in the PIE: Group 3 interrupt 1-3
     //
-    PieCtrlRegs.PIEIER3.bit.INTx1 = 1;
+    PieCtrlRegs.PIEIER3.bit.INTx1 = 0;
     EINT;       // Enable Global interrupt INTM
     ERTM;       // Enable Global realtime interrupt DBGM
     //
     // Wait for SCI to be idle and ready for transmission
     //
+    watchdoginit();
+    iowrite(30,0); // turn off fan
     while(LinaRegs.SCIFLR.bit.IDLE == 1);
     {
 
@@ -223,7 +246,13 @@ void main(void)
     scia_msg("\r\nC2000-PM_Motor_Drive V0.1\n\0");
     scia_msg("\r\n Copyright 2021 John Figie\n\0");
     scia_msg("\r\n License GPL V2.0 or newer\n\0");
-    scia_msg("\r\n C2000-PM_Motor_drive comes with ABSOLUTELY NO WARRANTY\n\0")
+    scia_msg("\r\n C2000-PM_Motor_drive comes with ABSOLUTELY NO WARRANTY\n\0");
+    axis2.fault = 0;
+    axis2.fault_last = 0;
+    axis2.state = 0;
+    axis1.fault = 0;
+    axis1.fault_last = 0;
+    axis1.state = 0;
 
     for(;;)
     {
@@ -233,11 +262,129 @@ void main(void)
         // wait for a new line
         while((ReceivedChar != (int) '\r') && (j < 40))
         {
+
+
+
+
             //
             // Wait for a character to by typed
             //
-            while(LinaRegs.SCIFLR.bit.RXRDY == 0);
+            while(LinaRegs.SCIFLR.bit.RXRDY == 0)
             {
+
+                // run some logic in this loop while waiting for input.
+
+                // check for a change in the fault status and report if changed.
+                        fault_temp = axis1.fault;
+                        if (fault_temp != axis1.fault_last){
+                            itoa(output_buffer, fault_temp);  //
+                            scia_msg("\r\naxis1.fault");
+                            scia_msg(output_buffer);
+                            scia_msg("\r\nClausingDrive> \0");
+                            axis1.fault_last = fault_temp;
+                            iowrite(31, 1);
+
+                        }
+                        fault_temp = axis2.fault;
+                        if (fault_temp != axis2.fault_last){
+                            itoa(output_buffer, fault_temp);  //
+                            scia_msg("\r\naxis2.fault");
+                            scia_msg(output_buffer);
+                            scia_msg("\r\nClausingDrive> \0");
+                            axis2.fault_last = fault_temp;
+                            iowrite(31, 1);
+
+                        }
+                        // check bus voltage and update I/O
+                        bus_up = bus_state(ADCch[2]);
+                        iowrite(27, bus_up);
+                        // check fault status and update I/O
+                        if (axis1.fault != 0 || axis2.fault != 0){
+                            iowrite(31, 1);
+                        }
+                        else{
+                            iowrite(31, 0);
+                        }
+
+                // axis state machine logic.
+                        //  state variable
+                        //  00 = Bus_Up_N
+                        //  01 = Bus_Up && Enable_N
+                        //  11 = Running - Enable && Bus_Up && Fault_N
+
+                        if (axis1.loop_mode == 1) {
+                           if (axis1.state == 1 && axis1.fault == 0) {
+                                if (0 == ioread(39)) {
+                                    pwm_on(1);
+                                    axis1.state = 3;
+                                    iowrite(30,1); // fan on
+                                }
+                           }
+                           if (axis1.state == 0) {
+                               if (bus_up == 1){
+                                   axis1.state = 1;
+                               }
+                           }
+                           if (axis1.state == 3) {
+                                if (1 == ioread(39)) {
+                                    pwm_off(1);
+                                    axis1.state = 1;
+                                }
+                                if (axis1.fault != 0 && axis2.fault != 0){
+                                    pwm_off(1);
+                                    axis1.state = 1;
+                                }
+                                if (bus_up == 0){
+                                    pwm_off(1);
+                                    axis1.state = 0;
+                                }
+                                if (axis1.state == 1) {
+                                    if (bus_up == 0){
+                                        axis1.state = 0;
+                                    }
+                                }
+                           }
+                        }
+                        if (axis1.loop_mode == 1 ) {  // loop_mode is only axis1 variable - not independent
+                            if (axis2.state == 1 && axis2.fault == 0) {
+                                if (0 == ioread(44)) {
+                                    pwm_on(2);
+                                    axis2.state = 3;
+                                    iowrite(30,1); // fan on
+                                }
+
+                           }
+                            if (axis2.state == 0) {
+                                if (bus_up == 1){
+                                    axis2.state = 1;
+                                }
+                            }
+                           if (axis2.state == 3) {
+                                if (1 == ioread(44)) {
+                                    pwm_off(2);
+                                    axis2.state = 1;
+                                }
+                                if (axis2.fault != 0 && axis1.fault !=0){
+                                    pwm_off(2);
+                                    axis2.state = 1;
+                                }
+                                if (bus_up == 0){
+                                    pwm_off(1);
+                                    axis1.state = 0;
+                                }
+                           }
+                           if (axis2.state == 1) {
+                               if (bus_up == 0){
+                                   axis2.state = 0;
+                               }
+                           }
+
+                        }
+
+
+
+
+
 
             }
 
@@ -307,14 +454,6 @@ void main(void)
         if (ExecuteCommand(ReceivedLine) == 0)
             scia_msg("\r\ncommand not found");
 
-        // check drive enables
-/*        if (PWM_Enable1 == 1){
-            pwm_on(1);
-        }
-        else {
-            pwm_off(1);
-            pwm_off_message(1);
-        } */
     }
 }
 
@@ -424,17 +563,27 @@ void set_pwm(Uint16 axis, Uint16 pwm_value)
     if (axis == 1)
     {
         EPwm1Regs.CMPA.half.CMPA = pwm_value;
-        EPwm2Regs.CMPA.half.CMPA = pwm_value;
+        EPwm2Regs.CMPA.half.CMPA = EPWM_TIMER_PRD - pwm_value;
     }
     if (axis == 2)
     {
         EPwm4Regs.CMPA.half.CMPA = pwm_value;
-        EPwm5Regs.CMPA.half.CMPA = pwm_value;
+        EPwm5Regs.CMPA.half.CMPA = EPWM_TIMER_PRD - pwm_value;
     }
+    if (axis == 7)
+    {
+        EPwm7Regs.CMPA.half.CMPA = pwm_value;
+    }
+    if (axis == 8)
+    {
+        EPwm7Regs.CMPB = pwm_value;
+    }
+
 return;
 }
 void pulse_pwm(Uint16 axis, Uint16 pwm_value,Uint16 npulses)
-// npulses,npulses1 are global!
+// npulses,npulses1 are global! // assume pwm1 and pwm2 are not pulsed simultaneously
+// this function works in conjunction with the PWM1 ISR to make the pulse
 {
     static Uint16 saved_pwm1,saved_pwm2;
     if (axis == 1)
@@ -443,13 +592,13 @@ void pulse_pwm(Uint16 axis, Uint16 pwm_value,Uint16 npulses)
         {
             saved_pwm1 = EPwm1Regs.CMPA.half.CMPA;
             EPwm1Regs.CMPA.half.CMPA = pwm_value;
-            EPwm2Regs.CMPA.half.CMPA = pwm_value;
+            EPwm2Regs.CMPA.half.CMPA = EPWM_TIMER_PRD - pwm_value;
             npulses1 = npulses;
         }
         else
         {
             EPwm1Regs.CMPA.half.CMPA = saved_pwm1;
-            EPwm2Regs.CMPA.half.CMPA = saved_pwm1;
+            EPwm2Regs.CMPA.half.CMPA = EPWM_TIMER_PRD - saved_pwm1;
         }
 
     }
@@ -459,31 +608,31 @@ void pulse_pwm(Uint16 axis, Uint16 pwm_value,Uint16 npulses)
         {
             saved_pwm2 = EPwm4Regs.CMPA.half.CMPA;
             EPwm4Regs.CMPA.half.CMPA = pwm_value;
-            EPwm5Regs.CMPA.half.CMPA = pwm_value;
+            EPwm5Regs.CMPA.half.CMPA = EPWM_TIMER_PRD - pwm_value;
             npulses2 = npulses;
         }
         else
         {
             EPwm4Regs.CMPA.half.CMPA = saved_pwm2;
-            EPwm5Regs.CMPA.half.CMPA = saved_pwm2;
+            EPwm5Regs.CMPA.half.CMPA = EPWM_TIMER_PRD - saved_pwm2;
         }
     }
 return;
 }
+// this function works in conjunction with the PWM1 ISR to make the pulse
+// npulses,npulses1 are global! // assume cref1 and cref2 are not pulsed simultaneously
 void pulse_cref(Uint16 axis, int16 cref_value,Uint16 npulses)
 {
-    static Uint16 saved_cref1,saved_cref2;
     if (axis == 1)
     {
         if (npulses!=0)
         {
-            saved_cref1 = axis1.cref;
             axis1.cref = cref_value;
             npulses1 = npulses;
         }
         else
         {
-            axis1.cref = saved_cref1;
+            axis1.cref = 0;            // set to zero after pulse
         }
 
     }
@@ -491,13 +640,12 @@ void pulse_cref(Uint16 axis, int16 cref_value,Uint16 npulses)
     {
         if (npulses!=0)
         {
-            saved_cref2 = axis2.cref;
             axis2.cref = cref_value;
             npulses2 = npulses;
         }
         else
         {
-            axis2.cref = saved_cref2;
+            axis2.cref = 0;            // set to zero after pulse
         }
     }
 return;
@@ -510,6 +658,9 @@ void pwm_off(Uint16 axis)  // force the pwm outputs off by sw
         EPwm1Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
         EPwm2Regs.AQCSFRC.bit.CSFA = AQ_CLEAR;
         EPwm2Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
+        if (axis1.state == 3) {
+            axis1.state = 1;
+        }
     }
     if (axis==2 | axis==0)
     {
@@ -517,6 +668,10 @@ void pwm_off(Uint16 axis)  // force the pwm outputs off by sw
         EPwm4Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
         EPwm5Regs.AQCSFRC.bit.CSFA = AQ_CLEAR;
         EPwm5Regs.AQCSFRC.bit.CSFB = AQ_CLEAR;
+        if (axis2.state == 3) {
+            axis2.state = 1;
+        }
+        axis2.state = 1;
 
     }
 
@@ -539,6 +694,9 @@ void pwm_on(Uint16 axis)  // pwms are already set to run but outputs were forced
 {
     if (axis==1)
     {
+        axis1.iterm = 0;        // init values in case loop is closed
+        axis1.pwm = 3750;
+        set_pwm(1,3750);
         EPwm1Regs.AQCSFRC.bit.CSFA = AQ_NO_ACTION;   // disable output forcing
         EPwm1Regs.AQCSFRC.bit.CSFB = AQ_NO_ACTION;
         EPwm2Regs.AQCSFRC.bit.CSFA = AQ_NO_ACTION;
@@ -548,6 +706,9 @@ void pwm_on(Uint16 axis)  // pwms are already set to run but outputs were forced
     }
     if (axis==2)
     {
+        axis2.iterm = 0;        // init values in case loop is closed
+        axis2.pwm = 3750;
+        set_pwm(2,3750);
         EPwm4Regs.AQCSFRC.bit.CSFA = AQ_NO_ACTION;   // disable output forcing
         EPwm4Regs.AQCSFRC.bit.CSFB = AQ_NO_ACTION;
         EPwm5Regs.AQCSFRC.bit.CSFA = AQ_NO_ACTION;
@@ -573,7 +734,7 @@ int32 pterm,iterm,errorterm,cterm;
     errorterm = ( axis->cref - axis->fb_current); // current is already opp sign so add
     pterm = errorterm * (int32) axis->pgain * (int32) 64 ;
     iterm = axis->iterm + errorterm * (int32) axis->igain;
-    if (iterm > 983040000) iterm = 983040000;
+    if (iterm > 983040000) iterm = 983040000;    // these values are +/- 2^18 which are the limits for calculations
     if (iterm < -983040000) iterm = -983040000;
     axis->iterm = iterm;
     cterm = ((pterm+iterm) >> 16) + 3750;
@@ -590,8 +751,55 @@ int32 pterm,iterm,errorterm,cterm;
     // add overload detection
 
 }
+int16 ioread(Uint16 io_number)
+{
+    switch (io_number)
+    {
+    case 39:
+        return(GpioDataRegs.GPBDAT.bit.GPIO39);
+    case 44:
+        return(GpioDataRegs.GPBDAT.bit.GPIO44);
+    }
+    scia_msg("\r\nbad port number");
+    return(-1);
+}
+void iowrite(Uint16 io_number, Uint16 io_value)
+{
+    switch (io_number)
+    {
+    case 27:
+        if (io_value == 1) GpioDataRegs.GPASET.bit.GPIO27 = 1;
+        if (io_value == 0) GpioDataRegs.GPACLEAR.bit.GPIO27 = 1;
+        break;
+    case 30:
+        if (io_value == 1) GpioDataRegs.GPASET.bit.GPIO30 = 1;
+        if (io_value == 0) GpioDataRegs.GPACLEAR.bit.GPIO30 = 1;
+        break;
+    case 31:
+        if (io_value == 1) GpioDataRegs.GPASET.bit.GPIO31 = 1;
+        if (io_value == 0) GpioDataRegs.GPACLEAR.bit.GPIO31 = 1;
+        break;
+    case 34:
+        if (io_value == 1) GpioDataRegs.GPBSET.bit.GPIO34 = 1;
+        if (io_value == 0) GpioDataRegs.GPBCLEAR.bit.GPIO34 = 1;
+        break;
+    default:
+        scia_msg("\r\nbad port number");
+    }
 
+}
+Uint16 bus_state(int16 bus_measurement)
+{
+    static Uint16 bus_state;
+    if ((Uint16)bus_measurement > bus_up_threshold){
+        bus_state = 1;
+    }
+    if ((Uint16)bus_measurement < bus_down_threshold){
+        bus_state = 0;
+    }
+    return bus_state;
 
+}
 //
 // End of File
 
